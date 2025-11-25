@@ -49,14 +49,15 @@ class GeminiService:
         except Exception as e:
             raise Exception(f"Erro ao criar RAG store: {str(e)}")
 
-    async def upload_to_rag_store(self, rag_store_name: str, file_path: str, mime_type: str, progress_callback=None) -> dict:
+    async def upload_to_rag_store(self, rag_store_name: str, file_path: str, mime_type: str, metadata: Optional[dict] = None, progress_callback=None) -> dict:
         """
-        Faz upload de arquivo para o RAG Store
+        Faz upload de arquivo para o RAG Store com metadados opcionais
 
         Args:
             rag_store_name: Nome do RAG store
             file_path: Caminho do arquivo local
             mime_type: Tipo MIME do arquivo
+            metadata: Metadados customizados (autor, categoria, tags, etc.)
             progress_callback: Callback opcional para atualizar progresso (recebe elapsed_seconds)
 
         Returns:
@@ -71,15 +72,24 @@ class GeminiService:
 
             # Upload direto para o file search store com timeout de 5 minutos
             print(f"⏳ Fazendo upload para RAG Store: {rag_store_name}")
+
+            # Configurar upload com metadados se fornecidos
+            upload_config = types.UploadToFileSearchStoreConfig(
+                display_name=file_path.split('/')[-1]
+            )
+
+            # Adicionar metadados se fornecidos
+            if metadata:
+                print(f"📋 Metadados: {metadata}")
+                upload_config.metadata = metadata
+
             operation = await asyncio.wait_for(
                 loop.run_in_executor(
                     None,
                     lambda: self.client.file_search_stores.upload_to_file_search_store(
                         file=file_path,
                         file_search_store_name=rag_store_name,
-                        config=types.UploadToFileSearchStoreConfig(
-                            display_name=file_path.split('/')[-1]
-                        )
+                        config=upload_config
                     )
                 ),
                 timeout=300.0  # 5 minutos
