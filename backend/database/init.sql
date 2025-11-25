@@ -1,5 +1,5 @@
--- ChatSUA Database Schema
--- Sistema Unificado de Administração - UNIFESP
+-- ApiRAGFS Database Schema
+-- RAG with Filesystem Storage
 -- Versão: 1.0.0
 
 -- Extensões
@@ -17,14 +17,14 @@ CREATE TABLE IF NOT EXISTS users (
 
 -- Tabela de Documentos
 CREATE TABLE IF NOT EXISTS documents (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    user_id UUID REFERENCES users(id) ON DELETE CASCADE,
+    id VARCHAR(255) PRIMARY KEY,
+    user_id VARCHAR(255) NOT NULL,
     name VARCHAR(255) NOT NULL,
     original_name VARCHAR(255) NOT NULL,
     type VARCHAR(50) NOT NULL,
     size BIGINT NOT NULL,
     minio_url VARCHAR(500) NOT NULL,
-    minio_bucket VARCHAR(100) DEFAULT 'chatsua-documents',
+    minio_bucket VARCHAR(100) DEFAULT 'apiragfs-documents',
     text_length INTEGER,
     extraction_method VARCHAR(100),
     chunks INTEGER,
@@ -38,9 +38,9 @@ CREATE TABLE IF NOT EXISTS documents (
 
 -- Tabela de Sessões de Chat
 CREATE TABLE IF NOT EXISTS chat_sessions (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    user_id UUID REFERENCES users(id) ON DELETE CASCADE,
-    document_id UUID REFERENCES documents(id) ON DELETE SET NULL,
+    id VARCHAR(255) PRIMARY KEY,
+    user_id VARCHAR(255) NOT NULL,
+    document_id VARCHAR(255),
     document_name VARCHAR(255),
     rag_store_name VARCHAR(255),
     started_at TIMESTAMP DEFAULT NOW(),
@@ -52,8 +52,8 @@ CREATE TABLE IF NOT EXISTS chat_sessions (
 
 -- Tabela de Mensagens
 CREATE TABLE IF NOT EXISTS messages (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    session_id UUID REFERENCES chat_sessions(id) ON DELETE CASCADE,
+    id VARCHAR(255) PRIMARY KEY,
+    session_id VARCHAR(255) NOT NULL,
     role VARCHAR(20) NOT NULL CHECK (role IN ('user', 'model')),
     content TEXT NOT NULL,
     grounding_chunks JSONB,
@@ -102,16 +102,16 @@ CREATE TRIGGER update_chat_sessions_updated_at BEFORE UPDATE ON chat_sessions
 
 -- Inserir usuário admin padrão para testes
 INSERT INTO users (email, name, role)
-VALUES ('admin@unifesp.br', 'Administrador', 'admin')
+VALUES ('admin@apiragfs.dev', 'Administrador', 'admin')
 ON CONFLICT (email) DO NOTHING;
 
 -- Inserir usuário de teste
 INSERT INTO users (email, name, role)
-VALUES ('teste@unifesp.br', 'Usuário Teste', 'student')
+VALUES ('teste@apiragfs.dev', 'Usuário Teste', 'student')
 ON CONFLICT (email) DO NOTHING;
 
 -- Mensagem de confirmação
 DO $$
 BEGIN
-    RAISE NOTICE 'Schema ChatSUA criado com sucesso!';
+    RAISE NOTICE 'Schema ApiRAGFS criado com sucesso!';
 END $$;
