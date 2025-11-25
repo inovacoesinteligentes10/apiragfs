@@ -8,16 +8,22 @@ import Spinner from './Spinner';
 import SendIcon from './icons/SendIcon';
 import RefreshIcon from './icons/RefreshIcon';
 
+interface DocumentInsight {
+    title: string;
+    description: string;
+    icon: 'document' | 'chart' | 'lightbulb';
+}
+
 interface ChatInterfaceProps {
-    documentName: string;
     history: ChatMessage[];
     isQueryLoading: boolean;
     onSendMessage: (message: string) => void;
     onNewChat: () => void;
     exampleQuestions: string[];
+    insights: DocumentInsight[];
 }
 
-const ChatInterface: React.FC<ChatInterfaceProps> = ({ documentName, history, isQueryLoading, onSendMessage, onNewChat, exampleQuestions }) => {
+const ChatInterface: React.FC<ChatInterfaceProps> = ({ history, isQueryLoading, onSendMessage, onNewChat, exampleQuestions, insights }) => {
     const [query, setQuery] = useState('');
     const [currentSuggestion, setCurrentSuggestion] = useState('');
     const [modalContent, setModalContent] = useState<string | null>(null);
@@ -38,6 +44,35 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ documentName, history, is
 
         return () => clearInterval(intervalId);
     }, [exampleQuestions]);
+
+    const getInsightIcon = (icon: string) => {
+        switch (icon) {
+            case 'document':
+                return (
+                    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                    </svg>
+                );
+            case 'chart':
+                return (
+                    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                    </svg>
+                );
+            case 'lightbulb':
+                return (
+                    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+                    </svg>
+                );
+            default:
+                return (
+                    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                );
+        }
+    };
     
     const renderMarkdown = (text: string) => {
         if (!text) return { __html: '' };
@@ -124,9 +159,9 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ documentName, history, is
     }, [history, isQueryLoading]);
 
     return (
-        <div className="flex flex-col h-screen bg-gradient-to-br from-slate-50 to-slate-100">
+        <div className="flex-1 flex flex-col bg-gradient-to-br from-slate-50 to-slate-100">
             {/* Header */}
-            <header className="bg-white border-b border-slate-200 shadow-sm">
+            <header className="bg-white border-b border-slate-200 shadow-sm flex-shrink-0">
                 <div className="px-8 py-6 flex justify-between items-center">
                     <div className="flex items-center space-x-4">
                         <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-purple-600 rounded-lg flex items-center justify-center">
@@ -135,10 +170,10 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ documentName, history, is
                             </svg>
                         </div>
                         <div>
-                            <h1 className="text-2xl font-bold text-slate-800" title={`Chat with ${documentName}`}>
-                                Conversando com ChatSUA
+                            <h1 className="text-2xl font-bold text-slate-800">
+                                ApiRAGFS Chat
                             </h1>
-                            <p className="text-sm text-slate-600">Documento: {documentName}</p>
+                            <p className="text-sm text-slate-600">Converse com todos os seus documentos</p>
                         </div>
                     </div>
                     <button
@@ -162,10 +197,40 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ documentName, history, is
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
                                 </svg>
                             </div>
-                            <h2 className="text-2xl font-bold text-slate-800 mb-3">Bem-vindo ao ChatSUA!</h2>
+                            <h2 className="text-2xl font-bold text-slate-800 mb-3">Bem-vindo ao ApiRAGFS!</h2>
                             <p className="text-slate-600 mb-6 max-w-2xl mx-auto">
-                                Faça perguntas sobre os documentos do SUA. Receba respostas precisas baseadas em citações literais dos documentos oficiais.
+                                Faça perguntas sobre seus documentos. Receba respostas precisas baseadas no conteúdo dos arquivos enviados.
                             </p>
+
+                            {/* Insights Cards */}
+                            {insights && insights.length > 0 && (
+                                <div className="mb-8">
+                                    <h3 className="text-lg font-semibold text-slate-700 mb-4">Insights dos Documentos</h3>
+                                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4 max-w-4xl mx-auto">
+                                        {insights.map((insight, idx) => (
+                                            <div
+                                                key={idx}
+                                                className="p-5 bg-white rounded-xl shadow-md border border-slate-200 hover:shadow-lg transition-all"
+                                            >
+                                                <div className="flex items-start space-x-3">
+                                                    <div className="flex-shrink-0 w-10 h-10 bg-gradient-to-br from-blue-500 to-purple-600 rounded-lg flex items-center justify-center text-white">
+                                                        {getInsightIcon(insight.icon)}
+                                                    </div>
+                                                    <div className="flex-1 min-w-0">
+                                                        <h4 className="text-sm font-semibold text-slate-800 mb-1">
+                                                            {insight.title}
+                                                        </h4>
+                                                        <p className="text-xs text-slate-600 leading-relaxed">
+                                                            {insight.description}
+                                                        </p>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
+
                             {exampleQuestions.length > 0 && (
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3 max-w-3xl mx-auto mt-8">
                                     {exampleQuestions.slice(0, 4).map((question, idx) => (
@@ -274,7 +339,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ documentName, history, is
             </div>
 
             {/* Input Area */}
-            <div className="bg-white border-t border-slate-200 shadow-lg">
+            <div className="bg-white border-t border-slate-200 shadow-lg flex-shrink-0">
                 <div className="max-w-5xl mx-auto px-8 py-6">
                     {/* Suggestions */}
                     {!isQueryLoading && currentSuggestion && history.length > 0 && (
@@ -299,7 +364,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ documentName, history, is
                                 type="text"
                                 value={query}
                                 onChange={(e) => setQuery(e.target.value)}
-                                placeholder="Faça uma pergunta sobre o SUA..."
+                                placeholder="Faça uma pergunta sobre seus documentos..."
                                 className="w-full bg-slate-50 border-2 border-slate-200 focus:border-blue-500 rounded-xl py-3.5 px-5 pr-12 focus:outline-none focus:ring-4 focus:ring-blue-100 transition-all text-slate-800 placeholder-slate-400"
                                 disabled={isQueryLoading}
                             />

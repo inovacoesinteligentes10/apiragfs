@@ -12,6 +12,9 @@ interface DocumentsTableProps {
 }
 
 const DocumentsTable: React.FC<DocumentsTableProps> = ({ documents, onDelete }) => {
+    console.log('📊 DocumentsTable renderizado com', documents.length, 'documentos');
+    console.log('📄 Primeiro documento:', documents[0]);
+
     const [currentPage, setCurrentPage] = useState(1);
     const [itemsPerPage, setItemsPerPage] = useState(10);
     const [sortField, setSortField] = useState<keyof ProcessedDocument>('uploadDate');
@@ -69,23 +72,94 @@ const DocumentsTable: React.FC<DocumentsTableProps> = ({ documents, onDelete }) 
         return `${(ms / 1000).toFixed(2)}s`;
     };
 
-    const getStatusBadge = (status: ProcessedDocument['status']) => {
-        const styles = {
-            processing: 'bg-blue-100 text-blue-800 border-blue-300',
-            completed: 'bg-green-100 text-green-800 border-green-300',
-            error: 'bg-red-100 text-red-800 border-red-300'
-        };
+    const getStatusBadge = (status: ProcessedDocument['status'], statusMessage?: string | null) => {
+        console.log('🔍 Status recebido:', status, 'Mensagem:', statusMessage);
 
-        const labels = {
-            processing: 'Processando',
-            completed: 'Completo',
-            error: 'Erro'
-        };
+        // Mapeamento direto de status para cores e labels
+        let bgColor = 'bg-gray-100';
+        let textColor = 'text-gray-800';
+        let borderColor = 'border-gray-300';
+        let label = 'Desconhecido';
 
+        switch(status) {
+            case 'uploaded':
+                bgColor = 'bg-blue-100';
+                textColor = 'text-blue-800';
+                borderColor = 'border-blue-300';
+                label = 'Enviado';
+                break;
+            case 'extracting':
+                bgColor = 'bg-purple-100';
+                textColor = 'text-purple-800';
+                borderColor = 'border-purple-300';
+                label = 'Extraindo';
+                break;
+            case 'chunking':
+                bgColor = 'bg-indigo-100';
+                textColor = 'text-indigo-800';
+                borderColor = 'border-indigo-300';
+                label = 'Fragmentando';
+                break;
+            case 'embedding':
+                bgColor = 'bg-violet-100';
+                textColor = 'text-violet-800';
+                borderColor = 'border-violet-300';
+                label = 'Vetorizando';
+                break;
+            case 'indexing':
+                bgColor = 'bg-cyan-100';
+                textColor = 'text-cyan-800';
+                borderColor = 'border-cyan-300';
+                label = 'Indexando';
+                break;
+            case 'completed':
+                bgColor = 'bg-green-100';
+                textColor = 'text-green-800';
+                borderColor = 'border-green-300';
+                label = 'Completo';
+                break;
+            case 'error':
+                bgColor = 'bg-red-100';
+                textColor = 'text-red-800';
+                borderColor = 'border-red-300';
+                label = 'Erro';
+                break;
+            default:
+                console.warn(`Status desconhecido: "${status}"`);
+                label = status || 'Desconhecido';
+        }
+
+        const isProcessing = status !== 'completed' && status !== 'error';
+
+        // Renderização super simples para debug
         return (
-            <span className={`px-3 py-1 rounded-full text-xs font-semibold border ${styles[status]}`}>
-                {labels[status]}
-            </span>
+            <div style={{display: 'flex', flexDirection: 'column', gap: '8px'}}>
+                <div
+                    className={`${bgColor} ${textColor} ${borderColor}`}
+                    style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '8px',
+                        padding: '4px 12px',
+                        borderRadius: '9999px',
+                        fontSize: '12px',
+                        fontWeight: '600',
+                        border: '1px solid',
+                        maxWidth: 'fit-content'
+                    }}
+                >
+                    {isProcessing && (
+                        <svg className="animate-spin" style={{width: '12px', height: '12px'}} xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                            <circle style={{opacity: 0.25}} cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                            <path style={{opacity: 0.75}} fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                        </svg>
+                    )}
+                    <span style={{color: 'inherit'}}>{label}</span>
+                </div>
+                {statusMessage && (
+                    <div style={{fontSize: '11px', color: '#64748b'}}>{statusMessage}</div>
+                )}
+            </div>
         );
     };
 
@@ -259,19 +333,29 @@ const DocumentsTable: React.FC<DocumentsTableProps> = ({ documents, onDelete }) 
                                     {formatBytes(doc.size)}
                                 </td>
                                 <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-600">
-                                    {doc.textLength.toLocaleString()} chars
+                                    {doc.textLength ? `${doc.textLength.toLocaleString()} chars` : '-'}
                                 </td>
                                 <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-600">
-                                    {doc.extractionMethod}
+                                    {doc.extractionMethod || '-'}
                                 </td>
                                 <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-600">
-                                    {doc.chunks}
+                                    {doc.chunks !== null && doc.chunks !== undefined ? doc.chunks : '-'}
                                 </td>
                                 <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-600">
-                                    {formatTime(doc.processingTime)}
+                                    {doc.processingTime ? formatTime(doc.processingTime) : '-'}
                                 </td>
-                                <td className="px-6 py-4 whitespace-nowrap">
-                                    {getStatusBadge(doc.status)}
+                                <td className="px-6 py-4">
+                                    <div className="flex flex-col gap-2 min-w-[150px]">
+                                        {getStatusBadge(doc.status, doc.statusMessage)}
+                                        {doc.progressPercent !== null && doc.status !== 'completed' && doc.status !== 'error' && (
+                                            <div className="w-full bg-slate-200 rounded-full h-2">
+                                                <div
+                                                    className="bg-blue-600 h-2 rounded-full transition-all duration-500"
+                                                    style={{ width: `${doc.progressPercent}%` }}
+                                                ></div>
+                                            </div>
+                                        )}
+                                    </div>
                                 </td>
                                 <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-600">
                                     {formatDate(doc.uploadDate)}

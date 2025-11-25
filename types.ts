@@ -50,11 +50,14 @@ export interface ProcessedDocument {
     name: string;
     type: string;
     size: number;
-    textLength: number;
-    extractionMethod: string;
-    chunks: number;
-    processingTime: number;
-    status: 'processing' | 'completed' | 'error';
+    textLength: number | null;
+    extractionMethod: string | null;
+    chunks: number | null;
+    processingTime: number | null;
+    status: 'uploaded' | 'extracting' | 'chunking' | 'embedding' | 'indexing' | 'completed' | 'error';
+    progressPercent: number | null;
+    statusMessage: string | null;
+    ragStoreName?: string | null;
     uploadDate: Date;
     error?: string;
 }

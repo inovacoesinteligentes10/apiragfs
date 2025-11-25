@@ -107,7 +107,7 @@ const StatusView: React.FC = () => {
                 {/* Header */}
                 <div className="mb-8">
                     <h1 className="text-3xl font-bold text-slate-800 mb-2">Status dos Serviços</h1>
-                    <p className="text-slate-600">Monitoramento em tempo real da infraestrutura do ChatSUA</p>
+                    <p className="text-slate-600">Monitoramento em tempo real da infraestrutura do ApiRAGFS</p>
                 </div>
 
                 {/* Overall Status Banner */}
