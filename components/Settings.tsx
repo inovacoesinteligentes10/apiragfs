@@ -29,7 +29,7 @@ const Settings: React.FC = () => {
                 {/* Header */}
                 <div className="mb-8">
                     <h1 className="text-3xl font-bold text-slate-800 mb-2">Configurações</h1>
-                    <p className="text-slate-600">Personalize o ChatSUA de acordo com suas necessidades</p>
+                    <p className="text-slate-600">Personalize o ApiRAGFS de acordo com suas necessidades</p>
                 </div>
 
                 {/* API Configuration */}

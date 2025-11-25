@@ -16,10 +16,10 @@ const Dashboard: React.FC<DashboardProps> = ({ onNavigateToDocuments, hasDocumen
             {/* Header */}
             <div className="mb-8">
                 <h1 className="text-4xl font-bold text-slate-800 mb-2">
-                    Bem-vindo ao ChatSUA
+                    Bem-vindo ao ApiRAGFS
                 </h1>
                 <p className="text-lg text-slate-600">
-                    Assistente inteligente para o Sistema Unificado de Administração da UNIFESP
+                    Sistema de RAG com Armazenamento em Filesystem e Google Gemini
                 </p>
             </div>
 
@@ -90,7 +90,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onNavigateToDocuments, hasDocumen
                             </div>
                             <div className="text-left">
                                 <h3 className="font-semibold text-slate-800 text-lg">Upload de Documentos</h3>
-                                <p className="text-sm text-slate-600 mt-1">Adicione documentos do SUA para análise</p>
+                                <p className="text-sm text-slate-600 mt-1">Adicione seus documentos para análise com IA</p>
                             </div>
                         </div>
                     </button>
@@ -119,10 +119,10 @@ const Dashboard: React.FC<DashboardProps> = ({ onNavigateToDocuments, hasDocumen
             {/* Info Cards */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div className="bg-gradient-to-br from-blue-500 to-purple-600 rounded-xl shadow-lg p-8 text-white">
-                    <h3 className="text-xl font-bold mb-3">Sobre o ChatSUA</h3>
+                    <h3 className="text-xl font-bold mb-3">Sobre o ApiRAGFS</h3>
                     <p className="text-blue-100 mb-4">
-                        Assistente especializado em responder dúvidas sobre o Sistema Unificado de
-                        Administração (SUA) da UNIFESP, atendendo estudantes, professores e técnicos administrativos.
+                        Sistema de Recuperação Aumentada por Geração (RAG) que permite fazer upload de documentos
+                        e conversar com eles usando Google Gemini AI para respostas precisas e contextualizadas.
                     </p>
                     <div className="flex items-center space-x-2 text-sm">
                         <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">

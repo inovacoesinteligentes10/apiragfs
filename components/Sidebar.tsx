@@ -97,8 +97,8 @@ const Sidebar: React.FC<SidebarProps> = ({ currentView, onNavigate, hasActiveSes
                         </svg>
                     </div>
                     <div>
-                        <h1 className="text-xl font-bold">ChatSUA</h1>
-                        <p className="text-xs text-slate-400">UNIFESP Assistant</p>
+                        <h1 className="text-xl font-bold">ApiRAGFS</h1>
+                        <p className="text-xs text-slate-400">RAG Assistant</p>
                     </div>
                 </div>
             </div>
@@ -149,9 +149,9 @@ const Sidebar: React.FC<SidebarProps> = ({ currentView, onNavigate, hasActiveSes
             {/* Footer */}
             <div className="p-4 border-t border-slate-700">
                 <div className="text-xs text-slate-400 space-y-1">
-                    <p>Sistema Unificado de</p>
-                    <p>Administração - UNIFESP</p>
-                    <p className="mt-2 text-slate-500">v2.0.0</p>
+                    <p>ApiRAGFS - Sistema RAG</p>
+                    <p>com Google Gemini AI</p>
+                    <p className="mt-2 text-slate-500">v1.0.0</p>
                 </div>
             </div>
         </aside>

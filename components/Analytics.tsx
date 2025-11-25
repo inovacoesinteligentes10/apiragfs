@@ -47,7 +47,7 @@ const Analytics: React.FC = () => {
                 {/* Header */}
                 <div className="mb-8">
                     <h1 className="text-3xl font-bold text-slate-800 mb-2">Analytics</h1>
-                    <p className="text-slate-600">Métricas e estatísticas de uso do ChatSUA</p>
+                    <p className="text-slate-600">Métricas e estatísticas de uso do ApiRAGFS</p>
                 </div>
 
                 {/* Stats Grid */}

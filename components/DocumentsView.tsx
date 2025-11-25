@@ -59,23 +59,20 @@ const DocumentsView: React.FC<DocumentsViewProps> = ({
                     Gerenciar Documentos
                 </h1>
                 <p className="text-lg text-slate-600">
-                    Faça upload de documentos do SUA para análise pela IA
+                    Faça upload de seus documentos para análise com IA
                 </p>
             </div>
 
-            {/* API Key Warning */}
-            {!isApiKeySelected && (
-                <div className="mb-6 bg-yellow-50 border-l-4 border-yellow-400 p-6 rounded-lg shadow-md">
+            {/* API Error Warning */}
+            {apiKeyError && (
+                <div className="mb-6 bg-red-50 border-l-4 border-red-400 p-6 rounded-lg shadow-md">
                     <div className="flex items-start">
-                        <svg className="w-6 h-6 text-yellow-600 mt-0.5 mr-3" fill="currentColor" viewBox="0 0 20 20">
-                            <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                        <svg className="w-6 h-6 text-red-600 mt-0.5 mr-3" fill="currentColor" viewBox="0 0 20 20">
+                            <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
                         </svg>
                         <div className="flex-1">
-                            <h3 className="text-lg font-semibold text-yellow-800">API Key Necessária</h3>
-                            <p className="text-yellow-700 mt-1">
-                                Configure sua chave de API do Gemini no arquivo .env.local para habilitar o upload
-                            </p>
-                            {apiKeyError && <p className="text-red-600 mt-2 font-medium">{apiKeyError}</p>}
+                            <h3 className="text-lg font-semibold text-red-800">Erro</h3>
+                            <p className="text-red-700 mt-1">{apiKeyError}</p>
                         </div>
                     </div>
                 </div>
@@ -149,7 +146,7 @@ const DocumentsView: React.FC<DocumentsViewProps> = ({
                         {/* Upload Button */}
                         <button
                             onClick={onUpload}
-                            disabled={!isApiKeySelected || isUploading}
+                            disabled={isUploading}
                             className="mt-6 w-full bg-gradient-to-r from-blue-600 to-purple-600 text-white py-4 px-6 rounded-lg font-semibold shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none"
                         >
                             {isUploading ? (
@@ -174,29 +171,48 @@ const DocumentsView: React.FC<DocumentsViewProps> = ({
                 <ol className="space-y-2 text-blue-800">
                     <li className="flex items-start">
                         <span className="font-bold mr-2">1.</span>
-                        <span>Faça upload dos documentos oficiais do SUA</span>
+                        <span>Faça upload de seus documentos (PDF, TXT, DOC, DOCX)</span>
                     </li>
                     <li className="flex items-start">
                         <span className="font-bold mr-2">2.</span>
-                        <span>O sistema criará embeddings e indexará o conteúdo</span>
+                        <span>O sistema processará e criará embeddings do conteúdo</span>
                     </li>
                     <li className="flex items-start">
                         <span className="font-bold mr-2">3.</span>
-                        <span>A IA gerará perguntas exemplo baseadas nos documentos</span>
+                        <span>A IA indexará os documentos usando Google Gemini</span>
                     </li>
                     <li className="flex items-start">
                         <span className="font-bold mr-2">4.</span>
-                        <span>Você poderá conversar com o ChatSUA sobre os documentos</span>
+                        <span>Você poderá conversar com a IA sobre os documentos</span>
                     </li>
                 </ol>
             </div>
 
             {/* Processed Documents Table */}
             {processedDocuments.length > 0 && (
-                <DocumentsTable
-                    documents={processedDocuments}
-                    onDelete={onDeleteDocument}
-                />
+                <>
+                    {processedDocuments.some(doc => doc.status !== 'completed' && doc.status !== 'error') && (
+                        <div className="bg-blue-50 border-l-4 border-blue-500 p-6 rounded-lg mb-6">
+                            <div className="flex items-start">
+                                <svg className="w-6 h-6 text-blue-600 mt-0.5 mr-3 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                </svg>
+                                <div className="flex-1">
+                                    <h3 className="text-lg font-semibold text-blue-900">Processamento em andamento</h3>
+                                    <p className="text-blue-800 mt-1">
+                                        Seus documentos estão sendo processados em segundo plano.
+                                        A tabela será atualizada automaticamente quando o processamento for concluído.
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+                    <DocumentsTable
+                        documents={processedDocuments}
+                        onDelete={onDeleteDocument}
+                    />
+                </>
             )}
         </div>
     );

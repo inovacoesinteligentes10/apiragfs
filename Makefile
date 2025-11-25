@@ -1,6 +1,6 @@
 .PHONY: help network up down logs status restart dev build install
 .PHONY: minio-up minio-down minio-logs minio-console minio-reset
-.PHONY: postgres-logs redis-logs health
+.PHONY: postgres-logs redis-logs health db-migrate db-init
 
 help: ## Mostra esta mensagem de ajuda
 	@echo "Comandos disponíveis:"
@@ -38,8 +38,8 @@ minio-up: network ## Inicia o MinIO
 	@echo "Iniciando MinIO..."
 	@docker compose up -d minio
 	@echo "✓ MinIO iniciado"
-	@echo "  Console: http://localhost:9001"
-	@echo "  API: http://localhost:9000"
+	@echo "  Console: http://localhost:9003"
+	@echo "  API: http://localhost:9002"
 	@echo "  Usuário: admin"
 	@echo "  Senha: admin123456"
 
@@ -52,8 +52,8 @@ minio-logs: ## Mostra os logs do MinIO
 	@docker compose logs -f minio
 
 minio-console: ## Abre o console do MinIO no navegador
-	@echo "Abrindo console do MinIO em http://localhost:9001"
-	@xdg-open http://localhost:9001 2>/dev/null || open http://localhost:9001 2>/dev/null || echo "Acesse: http://localhost:9001"
+	@echo "Abrindo console do MinIO em http://localhost:9003"
+	@xdg-open http://localhost:9003 2>/dev/null || open http://localhost:9003 2>/dev/null || echo "Acesse: http://localhost:9003"
 
 dev: ## Inicia o servidor de desenvolvimento
 	@npm run dev
@@ -85,16 +85,42 @@ redis-logs: ## Mostra logs do Redis
 
 # Healthcheck
 health: ## Verifica a saúde de todos os serviços
-	@echo "=== Status dos Serviços ChatSUA ==="
+	@echo "=== Status dos Serviços ApiRAGFS ==="
 	@echo ""
-	@echo "PostgreSQL (porta 5432):"
-	@docker exec chatsua-postgres pg_isready -U postgres 2>/dev/null && echo "  ✓ Healthy" || echo "  ✗ Unhealthy"
+	@echo "PostgreSQL (porta 5433):"
+	@docker exec apiragfs-postgres pg_isready -U postgres 2>/dev/null && echo "  ✓ Healthy" || echo "  ✗ Unhealthy"
 	@echo ""
-	@echo "Redis (porta 6379):"
-	@docker exec chatsua-redis redis-cli ping 2>/dev/null && echo "  ✓ Healthy" || echo "  ✗ Unhealthy"
+	@echo "Redis (porta 6380):"
+	@docker exec apiragfs-redis redis-cli ping 2>/dev/null && echo "  ✓ Healthy" || echo "  ✗ Unhealthy"
 	@echo ""
-	@echo "MinIO (portas 9000, 9001):"
-	@curl -sf http://localhost:9000/minio/health/live >/dev/null && echo "  ✓ Healthy" || echo "  ✗ Unhealthy"
+	@echo "MinIO (portas 9002, 9003):"
+	@curl -sf http://localhost:9002/minio/health/live >/dev/null && echo "  ✓ Healthy" || echo "  ✗ Unhealthy"
+	@echo ""
+	@echo "Backend API (porta 8000):"
+	@curl -sf http://localhost:8000/health >/dev/null && echo "  ✓ Healthy" || echo "  ✗ Unhealthy"
 	@echo ""
 	@echo "Frontend (porta 3001):"
-	@curl -sf http://localhost:3001 >/dev/null && echo "  ✓ Running" || echo "  ✗ Not Running"
+	@curl -sf http://localhost:3001 >/dev/null && echo "  ✓ Healthy" || echo "  ✗ Unhealthy"
+
+# Database
+db-init: ## Inicializa o banco de dados com o schema
+	@echo "Inicializando banco de dados..."
+	@docker exec -i apiragfs-postgres psql -U postgres -d apiragfs < backend/database/init.sql
+	@echo "✓ Banco de dados inicializado"
+
+db-migrate: ## Aplica migrações do banco de dados
+	@echo "Aplicando migrações..."
+	@docker exec -i apiragfs-postgres psql -U postgres -d apiragfs < backend/database/migration_remove_document_fields.sql
+	@echo "✓ Migrações aplicadas"
+
+db-fix-docs: ## Corrige documentos existentes sem rag_store_name
+	@echo "⚠️  Isso irá deletar documentos sem RAG Store!"
+	@echo "Documentos afetados serão removidos e você precisará fazer upload novamente."
+	@read -p "Continuar? [y/N] " -n 1 -r; \
+	echo; \
+	if [[ $$REPLY =~ ^[Yy]$$ ]]; then \
+		docker exec -i apiragfs-postgres psql -U postgres -d apiragfs -c "DELETE FROM documents WHERE rag_store_name IS NULL;"; \
+		echo "✓ Documentos sem RAG Store removidos"; \
+	else \
+		echo "Operação cancelada"; \
+	fi
