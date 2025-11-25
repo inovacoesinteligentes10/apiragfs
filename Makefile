@@ -118,6 +118,11 @@ db-migrate-settings: ## Aplica migração da tabela user_settings
 	@docker exec -i apiragfs-postgres psql -U postgres -d apiragfs < backend/database/migration_add_settings.sql
 	@echo "✓ Migração de settings aplicada"
 
+db-migrate-metadata: ## Aplica migração para suporte a metadados
+	@echo "Aplicando migração de metadados..."
+	@docker exec -i apiragfs-postgres psql -U postgres -d apiragfs < backend/database/migration_add_metadata.sql
+	@echo "✓ Migração de metadados aplicada"
+
 db-fix-docs: ## Corrige documentos existentes sem rag_store_name
 	@echo "⚠️  Isso irá deletar documentos sem RAG Store!"
 	@echo "Documentos afetados serão removidos e você precisará fazer upload novamente."

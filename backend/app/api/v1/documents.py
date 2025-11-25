@@ -1,11 +1,12 @@
 """
 Rotas da API para gerenciamento de documentos
 """
-from typing import List
-from fastapi import APIRouter, File, UploadFile, HTTPException, Depends, BackgroundTasks
+from typing import List, Optional
+from fastapi import APIRouter, File, UploadFile, Form, HTTPException, Depends, BackgroundTasks
 from datetime import datetime
 import uuid
 import asyncio
+import json
 
 from ...config import settings
 from ...config.database import db
@@ -20,7 +21,8 @@ async def process_document_background(
     document_id: str,
     file_content: bytes,
     file_name: str,
-    user_id: str
+    user_id: str,
+    metadata: Optional[dict] = None
 ):
     """Processa o documento em background com Gemini File Search"""
     try:
@@ -101,6 +103,7 @@ async def process_document_background(
                 rag_store_name=rag_store_name,
                 file_path=tmp_file_path,
                 mime_type=mime_type,
+                metadata=metadata,
                 progress_callback=progress_callback
             )
 
@@ -156,10 +159,16 @@ async def process_document_background(
 async def upload_document(
     background_tasks: BackgroundTasks,
     file: UploadFile = File(...),
+    metadata: Optional[str] = Form(None),
     user_id: str = "default-user"  # TODO: Pegar do token JWT
 ):
     """
-    Upload de documento
+    Upload de documento com metadados opcionais
+
+    Args:
+        file: Arquivo para upload
+        metadata: JSON string com metadados (ex: {"author": "Nome", "category": "Categoria", "tags": ["tag1", "tag2"]})
+        user_id: ID do usuário
     """
     # Validar extensão
     file_extension = f".{file.filename.split('.')[-1].lower()}" if '.' in file.filename else ''
@@ -168,6 +177,14 @@ async def upload_document(
             status_code=400,
             detail=f"Extensão de arquivo não permitida. Permitidos: {', '.join(settings.allowed_extensions)}"
         )
+
+    # Parsear metadados se fornecidos
+    metadata_dict = None
+    if metadata:
+        try:
+            metadata_dict = json.loads(metadata)
+        except json.JSONDecodeError:
+            raise HTTPException(status_code=400, detail="Metadados inválidos. Deve ser um JSON válido.")
 
     # Ler conteúdo do arquivo
     file_content = await file.read()
@@ -192,26 +209,27 @@ async def upload_document(
             content_type=file.content_type or "application/octet-stream"
         )
 
-        # Inserir no banco com status "uploaded"
+        # Inserir no banco com status "uploaded" e metadados
         await db.execute(
             """
             INSERT INTO documents (
                 id, user_id, name, original_name, type, size,
                 minio_url, minio_bucket, status, progress_percent, status_message,
-                upload_date, extraction_method, created_at, updated_at
-            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, NOW(), $12, NOW(), NOW())
+                upload_date, extraction_method, metadata, created_at, updated_at
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, NOW(), $12, $13::jsonb, NOW(), NOW())
             """,
             document_id, user_id, file.filename, file.filename,
             file_extension.replace('.', '').upper(), file_size,
             minio_url, minio_client.bucket, DocumentStatus.UPLOADED, 0,
             "Upload concluído, aguardando processamento...",
-            "Gemini File API"
+            "Gemini File API",
+            json.dumps(metadata_dict) if metadata_dict else '{}'
         )
 
         # Processar documento em background
         background_tasks.add_task(
             process_document_background,
-            document_id, file_content, file.filename, user_id
+            document_id, file_content, file.filename, user_id, metadata_dict
         )
 
         # Buscar documento inserido
