@@ -58,6 +58,15 @@ export interface DocumentInsight {
     icon: 'document' | 'chart' | 'lightbulb';
 }
 
+export interface SystemPromptResponse {
+    system_prompt: string;
+    updated_at: string;
+}
+
+export interface SystemPromptUpdate {
+    system_prompt: string;
+}
+
 class ApiService {
     private baseUrl: string;
 
@@ -327,6 +336,54 @@ class ApiService {
 
         if (!response.ok) {
             throw new Error('API não está respondendo');
+        }
+
+        return response.json();
+    }
+
+    /**
+     * Buscar system prompt atual
+     */
+    async getSystemPrompt(userId: string = 'default-user'): Promise<SystemPromptResponse> {
+        const response = await fetch(`${this.baseUrl}/api/v1/settings/system-prompt?user_id=${userId}`);
+
+        if (!response.ok) {
+            throw new Error('Erro ao buscar system prompt');
+        }
+
+        return response.json();
+    }
+
+    /**
+     * Atualizar system prompt
+     */
+    async updateSystemPrompt(systemPrompt: string, userId: string = 'default-user'): Promise<SystemPromptResponse> {
+        const response = await fetch(`${this.baseUrl}/api/v1/settings/system-prompt?user_id=${userId}`, {
+            method: 'PUT',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ system_prompt: systemPrompt }),
+        });
+
+        if (!response.ok) {
+            const error = await response.json();
+            throw new Error(error.detail || 'Erro ao atualizar system prompt');
+        }
+
+        return response.json();
+    }
+
+    /**
+     * Resetar system prompt para o padrão
+     */
+    async resetSystemPrompt(userId: string = 'default-user'): Promise<SystemPromptResponse> {
+        const response = await fetch(`${this.baseUrl}/api/v1/settings/reset-system-prompt?user_id=${userId}`, {
+            method: 'POST',
+        });
+
+        if (!response.ok) {
+            throw new Error('Erro ao resetar system prompt');
         }
 
         return response.json();

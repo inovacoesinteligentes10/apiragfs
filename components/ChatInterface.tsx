@@ -253,7 +253,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ history, isQueryLoading, 
                     )}
 
                     {history.map((message, index) => (
-                        <div key={index} className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                        <div key={index} className={`flex animate-fade-in ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}>
                             <div className={`flex items-start space-x-3 max-w-4xl ${message.role === 'user' ? 'flex-row-reverse space-x-reverse' : ''}`}>
                                 {/* Avatar */}
                                 <div className={`flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center ${
@@ -280,6 +280,10 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ history, isQueryLoading, 
                                 }`}>
                                     <div className={message.role === 'user' ? 'text-white' : 'text-slate-800'}>
                                         <div dangerouslySetInnerHTML={renderMarkdown(message.parts[0].text)} />
+                                        {/* Cursor piscante durante streaming (quando texto está vazio ou mensagem é a última e loading está ativo) */}
+                                        {message.role === 'model' && index === history.length - 1 && isQueryLoading && message.parts[0].text && (
+                                            <span className="inline-block w-0.5 h-5 bg-slate-800 ml-1 animate-blink"></span>
+                                        )}
                                     </div>
 
                                     {/* Sources */}
@@ -316,8 +320,8 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ history, isQueryLoading, 
                         </div>
                     ))}
 
-                    {/* Loading State */}
-                    {isQueryLoading && (
+                    {/* Loading State - só mostra se não há mensagem do modelo ainda */}
+                    {isQueryLoading && history.length > 0 && history[history.length - 1].role === 'user' && (
                         <div className="flex justify-start">
                             <div className="flex items-start space-x-3 max-w-4xl">
                                 <div className="flex-shrink-0 w-10 h-10 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center">
@@ -327,8 +331,12 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ history, isQueryLoading, 
                                 </div>
                                 <div className="flex-1 px-6 py-4 rounded-2xl bg-white border border-slate-200 shadow-md">
                                     <div className="flex items-center space-x-3">
-                                        <Spinner />
-                                        <span className="text-slate-600">Analisando documentos...</span>
+                                        <div className="flex space-x-1">
+                                            <div className="w-2 h-2 bg-slate-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></div>
+                                            <div className="w-2 h-2 bg-slate-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }}></div>
+                                            <div className="w-2 h-2 bg-slate-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }}></div>
+                                        </div>
+                                        <span className="text-slate-600">Pensando...</span>
                                     </div>
                                 </div>
                             </div>

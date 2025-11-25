@@ -113,6 +113,11 @@ db-migrate: ## Aplica migrações do banco de dados
 	@docker exec -i apiragfs-postgres psql -U postgres -d apiragfs < backend/database/migration_remove_document_fields.sql
 	@echo "✓ Migrações aplicadas"
 
+db-migrate-settings: ## Aplica migração da tabela user_settings
+	@echo "Aplicando migração de settings..."
+	@docker exec -i apiragfs-postgres psql -U postgres -d apiragfs < backend/database/migration_add_settings.sql
+	@echo "✓ Migração de settings aplicada"
+
 db-fix-docs: ## Corrige documentos existentes sem rag_store_name
 	@echo "⚠️  Isso irá deletar documentos sem RAG Store!"
 	@echo "Documentos afetados serão removidos e você precisará fazer upload novamente."

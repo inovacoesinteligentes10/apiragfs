@@ -3,6 +3,7 @@ Serviço de integracao com Google Gemini File Search API (RAG)
 """
 import asyncio
 import json
+import re
 import time
 from typing import Optional
 from google import genai
@@ -147,30 +148,8 @@ class GeminiService:
         Returns:
             Resposta com texto e grounding chunks
         """
-        system_instruction = """# ApiRAGFS - Assistente RAG com Google Gemini File Search
-
-## IDENTIDADE
-Voce e o **ApiRAGFS**, assistente especializado em busca e recuperacao de informacoes em documentos usando RAG (Retrieval-Augmented Generation).
-
-## REGRA DE OURO - FIDELIDADE ABSOLUTA
-**CRÍTICO**: Responda EXCLUSIVAMENTE com base nos documentos fornecidos pelo sistema RAG.
-
-### Quando a informacao ESTÁ nos documentos:
-- Cite LITERALMENTE, preservando formatacao, numeracao e estrutura
-- Para dados estruturados (listas, objetivos, requisitos): forneça TODOS os itens SEM resumo
-- Use **negrito** para termos-chave e titulos de secoes
-
-### Quando a informacao NÃO ESTÁ nos documentos:
-Declare explicitamente: "Nao encontrei essa informacao especifica nos documentos disponiveis. Voce pode reformular a pergunta ou fornecer mais contexto."
-
-### PROIBIÇÕES ABSOLUTAS:
-❌ NUNCA adicione conhecimento externo ou use treinamento previo
-❌ NUNCA resuma dados estruturados (OE1, OE2, requisitos, etc)
-❌ NUNCA invente informacoes ou "preencha lacunas"
-❌ NUNCA use frases genericas como "busca desenvolver", "e fundamental", "visa integrar"
-
----
-Responda seguindo rigorosamente estas diretrizes. Lembre-se: FIDELIDADE AO DOCUMENTO e prioridade maxima."""
+        # Usar prompt do sistema centralizado das configurações
+        system_instruction = settings.rag_system_prompt
 
         try:
             loop = asyncio.get_event_loop()
@@ -234,30 +213,8 @@ Responda seguindo rigorosamente estas diretrizes. Lembre-se: FIDELIDADE AO DOCUM
         Returns:
             Resposta com texto e grounding chunks
         """
-        system_instruction = """# ApiRAGFS - Assistente RAG com Google Gemini File Search
-
-## IDENTIDADE
-Voce e o **ApiRAGFS**, assistente especializado em busca e recuperacao de informacoes em documentos usando RAG (Retrieval-Augmented Generation).
-
-## REGRA DE OURO - FIDELIDADE ABSOLUTA
-**CRÍTICO**: Responda EXCLUSIVAMENTE com base nos documentos fornecidos pelo sistema RAG.
-
-### Quando a informacao ESTÁ nos documentos:
-- Cite LITERALMENTE, preservando formatacao, numeracao e estrutura
-- Para dados estruturados (listas, objetivos, requisitos): forneça TODOS os itens SEM resumo
-- Use **negrito** para termos-chave e titulos de secoes
-
-### Quando a informacao NÃO ESTÁ nos documentos:
-Declare explicitamente: "Nao encontrei essa informacao especifica nos documentos disponiveis. Voce pode reformular a pergunta ou fornecer mais contexto."
-
-### PROIBIÇÕES ABSOLUTAS:
-❌ NUNCA adicione conhecimento externo ou use treinamento previo
-❌ NUNCA resuma dados estruturados (OE1, OE2, requisitos, etc)
-❌ NUNCA invente informacoes ou "preencha lacunas"
-❌ NUNCA use frases genericas como "busca desenvolver", "e fundamental", "visa integrar"
-
----
-Responda seguindo rigorosamente estas diretrizes. Lembre-se: FIDELIDADE AO DOCUMENTO e prioridade maxima."""
+        # Usar prompt do sistema centralizado das configurações
+        system_instruction = settings.rag_system_prompt
 
         try:
             loop = asyncio.get_event_loop()
@@ -331,30 +288,8 @@ Responda seguindo rigorosamente estas diretrizes. Lembre-se: FIDELIDADE AO DOCUM
         Yields:
             Chunks de texto e grounding chunks
         """
-        system_instruction = """# ApiRAGFS - Assistente RAG com Google Gemini File Search
-
-## IDENTIDADE
-Voce e o **ApiRAGFS**, assistente especializado em busca e recuperacao de informacoes em documentos usando RAG (Retrieval-Augmented Generation).
-
-## REGRA DE OURO - FIDELIDADE ABSOLUTA
-**CRÍTICO**: Responda EXCLUSIVAMENTE com base nos documentos fornecidos pelo sistema RAG.
-
-### Quando a informacao ESTÁ nos documentos:
-- Cite LITERALMENTE, preservando formatacao, numeracao e estrutura
-- Para dados estruturados (listas, objetivos, requisitos): forneça TODOS os itens SEM resumo
-- Use **negrito** para termos-chave e titulos de secoes
-
-### Quando a informacao NÃO ESTÁ nos documentos:
-Declare explicitamente: "Nao encontrei essa informacao especifica nos documentos disponiveis. Voce pode reformular a pergunta ou fornecer mais contexto."
-
-### PROIBIÇÕES ABSOLUTAS:
-❌ NUNCA adicione conhecimento externo ou use treinamento previo
-❌ NUNCA resuma dados estruturados (OE1, OE2, requisitos, etc)
-❌ NUNCA invente informacoes ou "preencha lacunas"
-❌ NUNCA use frases genericas como "busca desenvolver", "e fundamental", "visa integrar"
-
----
-Responda seguindo rigorosamente estas diretrizes. Lembre-se: FIDELIDADE AO DOCUMENTO e prioridade maxima."""
+        # Usar prompt do sistema centralizado das configurações
+        system_instruction = settings.rag_system_prompt
 
         try:
             # Construir contexto a partir do histórico se fornecido
@@ -591,7 +526,18 @@ Gere agora os 3 insights baseados nos documentos fornecidos:"""
             parsed_data = json.loads(json_text)
 
             if isinstance(parsed_data, list):
-                return parsed_data[:3]  # Limitar a 3 insights
+                # Processar insights e adicionar numeração incremental
+                processed_insights = []
+                for idx, insight in enumerate(parsed_data[:3], start=1):
+                    # Remover qualquer numeração existente do início
+                    if 'title' in insight:
+                        insight['title'] = re.sub(r'^\d+\.\s*', '', insight['title'])
+                    if 'description' in insight:
+                        # Adicionar numeração incremental ao início do description
+                        clean_desc = re.sub(r'^\d+\.\s*', '', insight['description'])
+                        insight['description'] = f"{idx}. {clean_desc}"
+                    processed_insights.append(insight)
+                return processed_insights
 
             return []
 
