@@ -18,6 +18,124 @@ from ...services.gemini_service import GeminiService
 router = APIRouter()
 
 
+@router.post("/reprocess-documents")
+async def reprocess_documents(background_tasks: BackgroundTasks, user_id: str = "default-user"):
+    """
+    Reprocessa documentos que estão com status 'uploaded' (sem RAG store)
+    """
+    try:
+        # Buscar documentos que precisam ser reprocessados
+        documents = await db.fetch_all(
+            """
+            SELECT id, name, type, minio_url, minio_bucket, department
+            FROM documents
+            WHERE user_id = $1 AND status = 'uploaded' AND rag_store_name IS NULL
+            """,
+            user_id
+        )
+
+        if not documents:
+            return {"message": "Nenhum documento precisa ser reprocessado", "count": 0}
+
+        # Baixar e reprocessar cada documento
+        for doc in documents:
+            # Baixar do MinIO - remover bucket do path se estiver duplicado
+            object_name = doc['minio_url']
+            if object_name.startswith(f"{doc['minio_bucket']}/"):
+                object_name = object_name[len(f"{doc['minio_bucket']}/"):]
+
+            response = minio_client.client.get_object(
+                bucket_name=doc['minio_bucket'],
+                object_name=object_name
+            )
+            file_data = response.read()
+            response.close()
+            response.release_conn()
+
+            # Iniciar reprocessamento em background
+            metadata = {"department": doc['department']} if doc['department'] else None
+
+            background_tasks.add_task(
+                process_document_background,
+                doc['id'],
+                file_data,
+                doc['name'],
+                user_id,
+                metadata
+            )
+
+        return {
+            "message": f"{len(documents)} documentos foram enviados para reprocessamento",
+            "count": len(documents),
+            "documents": [{"id": doc['id'], "name": doc['name']} for doc in documents]
+        }
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Erro ao reprocessar documentos: {str(e)}")
+
+
+@router.post("/validate-stores")
+async def validate_and_fix_stores(user_id: str = "default-user"):
+    """
+    Valida todos os RAG stores e recria os que não existem mais no Gemini
+    """
+    try:
+        gemini_service = GeminiService()
+
+        # Buscar todos os documentos completos
+        documents = await db.fetch_all(
+            """
+            SELECT DISTINCT department, rag_store_name
+            FROM documents
+            WHERE user_id = $1 AND status = 'completed' AND rag_store_name IS NOT NULL
+            """,
+            user_id
+        )
+
+        results = []
+        for doc in documents:
+            department = doc['department']
+            rag_store_name = doc['rag_store_name']
+
+            # Validar se o RAG store existe
+            print(f"🔍 Validando RAG store de {department}: {rag_store_name}")
+            store_exists = await gemini_service.validate_rag_store(rag_store_name)
+
+            if not store_exists:
+                print(f"⚠️ RAG store não existe. Marcando documentos para reprocessamento...")
+
+                # Marcar documentos como pending para reprocessamento
+                await db.execute(
+                    """
+                    UPDATE documents
+                    SET status = 'uploaded', progress_percent = 0, rag_store_name = NULL
+                    WHERE department = $1 AND user_id = $2
+                    """,
+                    department, user_id
+                )
+
+                results.append({
+                    "department": department,
+                    "status": "invalid",
+                    "action": "marked_for_reprocess"
+                })
+            else:
+                print(f"✅ RAG store válido")
+                results.append({
+                    "department": department,
+                    "status": "valid",
+                    "action": "none"
+                })
+
+        return {
+            "message": "Validação concluída",
+            "results": results
+        }
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Erro ao validar stores: {str(e)}")
+
+
 async def process_document_background(
     document_id: str,
     file_content: bytes,
@@ -63,9 +181,21 @@ async def process_document_background(
         )
 
         if existing_rag_store and existing_rag_store['rag_store_name']:
-            # Usar RAG Store existente do department
+            # Verificar se o RAG Store ainda existe no Gemini
             rag_store_name = existing_rag_store['rag_store_name']
-            print(f"📦 Usando RAG Store de {department_display}: {rag_store_name}")
+            print(f"🔍 Verificando RAG Store de {department_display}: {rag_store_name}")
+
+            store_exists = await gemini_service.validate_rag_store(rag_store_name)
+
+            if store_exists:
+                print(f"📦 Usando RAG Store existente de {department_display}: {rag_store_name}")
+            else:
+                print(f"⚠️ RAG Store não existe mais. Criando novo...")
+                # Criar novo RAG Store
+                rag_store_name = await gemini_service.create_rag_store(
+                    display_name=f"{department_display} - {user_id}"
+                )
+                print(f"✨ Novo RAG Store criado para {department_display}: {rag_store_name}")
         else:
             # Criar novo RAG Store para este department
             rag_store_name = await gemini_service.create_rag_store(
@@ -121,7 +251,9 @@ async def process_document_background(
             )
 
             text_length = len(file_content)
-            chunks = text_length // 1000
+            # Calcular chunks: mínimo 1, máximo baseado no tamanho
+            # Cada chunk tem aproximadamente 1000 caracteres
+            chunks = max(1, text_length // 1000)
 
             # Status: Indexando (80%)
             await db.execute(
@@ -312,6 +444,101 @@ async def get_document(
         raise HTTPException(status_code=404, detail="Documento não encontrado")
 
     return DocumentResponse(**dict(document))
+
+
+@router.patch("/{document_id}/move-store")
+async def move_document_to_store(
+    document_id: str,
+    target_store: str,
+    background_tasks: BackgroundTasks,
+    user_id: str = "default-user"
+):
+    """
+    Move um documento para outro store (departamento)
+    """
+    try:
+        # Buscar documento
+        document = await db.fetch_one(
+            """
+            SELECT * FROM documents
+            WHERE id = $1 AND user_id = $2
+            """,
+            document_id, user_id
+        )
+
+        if not document:
+            raise HTTPException(status_code=404, detail="Documento não encontrado")
+
+        # Verificar se o store de destino existe
+        store = await db.fetch_one(
+            """
+            SELECT * FROM rag_stores
+            WHERE user_id = $1 AND name = $2
+            """,
+            user_id, target_store
+        )
+
+        if not store:
+            raise HTTPException(status_code=404, detail=f"Store '{target_store}' não encontrado")
+
+        old_store = document['department']
+
+        # Marcar documento como 'uploaded' para reprocessamento
+        # Resetar todos os campos de processamento
+        await db.execute(
+            """
+            UPDATE documents
+            SET department = $1,
+                status = 'uploaded',
+                progress_percent = 0,
+                status_message = NULL,
+                error_message = NULL,
+                rag_store_name = NULL,
+                text_length = NULL,
+                chunks = NULL,
+                processing_time = NULL,
+                extraction_method = NULL,
+                updated_at = NOW()
+            WHERE id = $2
+            """,
+            target_store, document_id
+        )
+
+        # Baixar arquivo do MinIO e reprocessar
+        object_name = document['minio_url']
+        if object_name.startswith(f"{document['minio_bucket']}/"):
+            object_name = object_name[len(f"{document['minio_bucket']}/"):]
+
+        response = minio_client.client.get_object(
+            bucket_name=document['minio_bucket'],
+            object_name=object_name
+        )
+        file_data = response.read()
+        response.close()
+        response.release_conn()
+
+        # Reprocessar em background com novo department
+        metadata = {"department": target_store}
+        background_tasks.add_task(
+            process_document_background,
+            document_id,
+            file_data,
+            document['name'],
+            user_id,
+            metadata
+        )
+
+        return {
+            "message": f"Documento movido de '{old_store}' para '{target_store}' e enviado para reprocessamento",
+            "document_id": document_id,
+            "old_store": old_store,
+            "new_store": target_store
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Erro ao mover documento: {str(e)}")
 
 
 @router.delete("/{document_id}")

@@ -4,9 +4,11 @@
 */
 import React, { useState, useEffect, useRef } from 'react';
 import { ChatMessage } from '../types';
+import { RagStore } from '../services/apiService';
 import Spinner from './Spinner';
 import SendIcon from './icons/SendIcon';
 import RefreshIcon from './icons/RefreshIcon';
+import StoreSelector from './StoreSelector';
 
 interface DocumentInsight {
     title: string;
@@ -21,9 +23,22 @@ interface ChatInterfaceProps {
     onNewChat: () => void;
     exampleQuestions: string[];
     insights: DocumentInsight[];
+    stores?: RagStore[];
+    selectedStore?: RagStore | null;
+    onSelectStore?: (store: RagStore) => void;
 }
 
-const ChatInterface: React.FC<ChatInterfaceProps> = ({ history, isQueryLoading, onSendMessage, onNewChat, exampleQuestions, insights }) => {
+const ChatInterface: React.FC<ChatInterfaceProps> = ({
+    history,
+    isQueryLoading,
+    onSendMessage,
+    onNewChat,
+    exampleQuestions,
+    insights,
+    stores = [],
+    selectedStore = null,
+    onSelectStore
+}) => {
     const [query, setQuery] = useState('');
     const [currentSuggestion, setCurrentSuggestion] = useState('');
     const [modalContent, setModalContent] = useState<string | null>(null);
@@ -160,6 +175,16 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ history, isQueryLoading, 
 
     return (
         <div className="flex-1 flex flex-col bg-gradient-to-br from-slate-50 to-slate-100">
+            {/* Store Selector */}
+            {stores.length > 0 && onSelectStore && (
+                <StoreSelector
+                    stores={stores}
+                    selectedStore={selectedStore}
+                    onSelectStore={onSelectStore}
+                    disabled={isQueryLoading}
+                />
+            )}
+
             {/* Header */}
             <header className="bg-white border-b border-slate-200 shadow-sm flex-shrink-0">
                 <div className="px-8 py-6 flex justify-between items-center">

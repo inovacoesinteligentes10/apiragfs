@@ -113,6 +113,50 @@ async def create_store(store: StoreCreate, user_id: str = "default-user"):
         raise HTTPException(status_code=500, detail=f"Erro ao criar store: {str(e)}")
 
 
+@router.put("/{store_name}", response_model=StoreResponse)
+async def update_store(store_name: str, store: StoreCreate, user_id: str = "default-user"):
+    """
+    Atualiza um store/department existente (apenas display_name, description, icon, color)
+    """
+    # Verificar se store existe
+    existing = await db.fetch_one(
+        "SELECT id FROM rag_stores WHERE user_id = $1 AND name = $2",
+        user_id, store_name
+    )
+
+    if not existing:
+        raise HTTPException(status_code=404, detail="Store não encontrado")
+
+    try:
+        # Atualizar apenas campos editáveis (não permite mudar o 'name')
+        await db.execute(
+            """
+            UPDATE rag_stores
+            SET display_name = $3, description = $4, icon = $5, color = $6, updated_at = NOW()
+            WHERE user_id = $1 AND name = $2
+            """,
+            user_id, store_name, store.display_name, store.description, store.icon, store.color
+        )
+
+        # Buscar store atualizado
+        updated_store = await db.fetch_one(
+            """
+            SELECT
+                id, user_id, name, display_name, description, icon, color,
+                created_at, updated_at,
+                (SELECT COUNT(*) FROM documents WHERE user_id = $1 AND department = $2) as document_count
+            FROM rag_stores
+            WHERE user_id = $1 AND name = $2
+            """,
+            user_id, store_name
+        )
+
+        return dict(updated_store)
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Erro ao atualizar store: {str(e)}")
+
+
 @router.delete("/{store_name}")
 async def delete_store(store_name: str, user_id: str = "default-user"):
     """

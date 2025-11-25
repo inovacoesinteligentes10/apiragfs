@@ -15,6 +15,7 @@ export interface DocumentUploadResponse {
     minio_bucket: string;
     text_length: number | null;
     extraction_method: string | null;
+    department: string | null;
     chunks: number | null;
     processing_time: number | null;
     status: 'uploaded' | 'extracting' | 'chunking' | 'embedding' | 'indexing' | 'completed' | 'error';
@@ -67,6 +68,28 @@ export interface SystemPromptUpdate {
     system_prompt: string;
 }
 
+export interface RagStore {
+    id: string;
+    user_id: string;
+    name: string;
+    display_name: string;
+    description: string | null;
+    icon: string | null;
+    color: string | null;
+    document_count: number;
+    rag_store_name: string | null;
+    created_at: string;
+    updated_at: string;
+}
+
+export interface RagStoreCreate {
+    name: string;
+    display_name: string;
+    description?: string;
+    icon?: string;
+    color?: string;
+}
+
 class ApiService {
     private baseUrl: string;
 
@@ -77,9 +100,15 @@ class ApiService {
     /**
      * Upload de documento
      */
-    async uploadDocument(file: File): Promise<DocumentUploadResponse> {
+    async uploadDocument(file: File, department?: string): Promise<DocumentUploadResponse> {
         const formData = new FormData();
         formData.append('file', file);
+
+        // Adicionar department aos metadados se fornecido
+        if (department) {
+            const metadata = { department };
+            formData.append('metadata', JSON.stringify(metadata));
+        }
 
         const response = await fetch(`${this.baseUrl}/api/v1/documents/upload`, {
             method: 'POST',
@@ -384,6 +413,102 @@ class ApiService {
 
         if (!response.ok) {
             throw new Error('Erro ao resetar system prompt');
+        }
+
+        return response.json();
+    }
+
+    /**
+     * Listar RAG Stores (Departments)
+     */
+    async listRagStores(userId: string = 'default-user'): Promise<RagStore[]> {
+        const response = await fetch(`${this.baseUrl}/api/v1/stores/?user_id=${userId}`);
+
+        if (!response.ok) {
+            throw new Error('Erro ao listar stores');
+        }
+
+        return response.json();
+    }
+
+    /**
+     * Buscar RAG Store por nome
+     */
+    async getRagStore(storeName: string, userId: string = 'default-user'): Promise<RagStore> {
+        const response = await fetch(`${this.baseUrl}/api/v1/stores/${storeName}?user_id=${userId}`);
+
+        if (!response.ok) {
+            throw new Error('Store não encontrado');
+        }
+
+        return response.json();
+    }
+
+    /**
+     * Criar novo RAG Store
+     */
+    async createRagStore(storeData: RagStoreCreate, userId: string = 'default-user'): Promise<RagStore> {
+        const response = await fetch(`${this.baseUrl}/api/v1/stores/?user_id=${userId}`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(storeData),
+        });
+
+        if (!response.ok) {
+            const error = await response.json();
+            throw new Error(error.detail || 'Erro ao criar store');
+        }
+
+        return response.json();
+    }
+
+    /**
+     * Atualizar RAG Store
+     */
+    async updateRagStore(storeName: string, storeData: RagStoreCreate, userId: string = 'default-user'): Promise<RagStore> {
+        const response = await fetch(`${this.baseUrl}/api/v1/stores/${storeName}?user_id=${userId}`, {
+            method: 'PUT',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(storeData),
+        });
+
+        if (!response.ok) {
+            const error = await response.json();
+            throw new Error(error.detail || 'Erro ao atualizar store');
+        }
+
+        return response.json();
+    }
+
+    /**
+     * Deletar RAG Store
+     */
+    async deleteRagStore(storeName: string, userId: string = 'default-user'): Promise<void> {
+        const response = await fetch(`${this.baseUrl}/api/v1/stores/${storeName}?user_id=${userId}`, {
+            method: 'DELETE',
+        });
+
+        if (!response.ok) {
+            const error = await response.json();
+            throw new Error(error.detail || 'Erro ao deletar store');
+        }
+    }
+
+    /**
+     * Mover documento para outro store
+     */
+    async moveDocumentToStore(documentId: string, targetStore: string, userId: string = 'default-user'): Promise<{ message: string; old_store: string; new_store: string }> {
+        const response = await fetch(`${this.baseUrl}/api/v1/documents/${documentId}/move-store?target_store=${targetStore}&user_id=${userId}`, {
+            method: 'PATCH',
+        });
+
+        if (!response.ok) {
+            const error = await response.json();
+            throw new Error(error.detail || 'Erro ao mover documento');
         }
 
         return response.json();

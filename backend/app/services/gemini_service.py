@@ -73,15 +73,14 @@ class GeminiService:
             # Upload direto para o file search store com timeout de 5 minutos
             print(f"⏳ Fazendo upload para RAG Store: {rag_store_name}")
 
-            # Configurar upload com metadados se fornecidos
+            # Configurar upload (metadata não é suportado diretamente no UploadToFileSearchStoreConfig)
+            # Os metadados são armazenados apenas no banco de dados local
             upload_config = types.UploadToFileSearchStoreConfig(
                 display_name=file_path.split('/')[-1]
             )
 
-            # Adicionar metadados se fornecidos
             if metadata:
-                print(f"📋 Metadados: {metadata}")
-                upload_config.metadata = metadata
+                print(f"📋 Metadados (armazenados localmente): {metadata}")
 
             operation = await asyncio.wait_for(
                 loop.run_in_executor(
@@ -211,6 +210,30 @@ class GeminiService:
         except Exception as e:
             raise Exception(f"Erro ao realizar file search: {str(e)}")
 
+    async def validate_rag_store(self, rag_store_name: str) -> bool:
+        """
+        Valida se um RAG store existe e está acessível
+
+        Args:
+            rag_store_name: Nome do RAG store
+
+        Returns:
+            True se o store existe, False caso contrário
+        """
+        try:
+            loop = asyncio.get_event_loop()
+            store = await loop.run_in_executor(
+                None,
+                lambda: self.client.file_search_stores.get(name=rag_store_name)
+            )
+            return store is not None
+        except Exception as e:
+            error_msg = str(e).lower()
+            if "not exist" in error_msg or "not found" in error_msg or "permission" in error_msg or "invalid_argument" in error_msg:
+                return False
+            # Re-lançar outros erros
+            raise
+
     async def query_with_rag(self, rag_store_name: str, query: str, history: list[dict] = None) -> dict:
         """
         Realiza query com contexto de histórico de conversa
@@ -227,6 +250,12 @@ class GeminiService:
         system_instruction = settings.rag_system_prompt
 
         try:
+            # Validar se o RAG store existe antes de tentar a query
+            print(f"🔍 Validando RAG store: {rag_store_name}")
+            store_exists = await self.validate_rag_store(rag_store_name)
+            if not store_exists:
+                raise Exception(f"O RAG store '{rag_store_name}' não existe ou não está acessível. Por favor, crie uma nova sessão de chat.")
+
             loop = asyncio.get_event_loop()
 
             # Construir contexto a partir do histórico se fornecido
@@ -284,7 +313,15 @@ class GeminiService:
             }
 
         except Exception as e:
-            raise Exception(f"Erro ao realizar query com RAG: {str(e)}")
+            error_msg = str(e)
+            # Melhorar mensagens de erro para problemas comuns
+            if "INVALID_ARGUMENT" in error_msg or "does not exist" in error_msg:
+                raise Exception(f"O RAG store não existe ou está inacessível. Por favor, crie uma nova sessão de chat com documentos válidos.")
+            elif "PERMISSION_DENIED" in error_msg:
+                raise Exception(f"Sem permissão para acessar o RAG store. Por favor, crie uma nova sessão de chat.")
+            elif "UNAVAILABLE" in error_msg or "overloaded" in error_msg:
+                raise Exception(f"O serviço do Gemini está temporariamente indisponível. Por favor, tente novamente em alguns instantes.")
+            raise Exception(f"Erro ao realizar query com RAG: {error_msg}")
 
     def query_with_rag_stream(self, rag_store_name: str, query: str, history: list[dict] = None):
         """
@@ -302,6 +339,18 @@ class GeminiService:
         system_instruction = settings.rag_system_prompt
 
         try:
+            # Validar se o RAG store existe antes de tentar a query (síncrono)
+            print(f"🔍 Validando RAG store (stream): {rag_store_name}")
+            try:
+                store = self.client.file_search_stores.get(name=rag_store_name)
+                if not store:
+                    raise Exception(f"O RAG store '{rag_store_name}' não existe ou não está acessível. Por favor, crie uma nova sessão de chat.")
+            except Exception as e:
+                error_msg = str(e).lower()
+                if "not exist" in error_msg or "not found" in error_msg or "permission" in error_msg or "invalid_argument" in error_msg:
+                    raise Exception(f"O RAG store não existe ou está inacessível. Por favor, crie uma nova sessão de chat com documentos válidos.")
+                raise
+
             # Construir contexto a partir do histórico se fornecido
             contents = query
             if history and len(history) > 1:
@@ -386,10 +435,28 @@ class GeminiService:
             }
 
         except Exception as e:
-            yield {
-                "type": "error",
-                "message": f"Erro ao realizar query com RAG: {str(e)}"
-            }
+            error_msg = str(e)
+            # Melhorar mensagens de erro para problemas comuns
+            if "INVALID_ARGUMENT" in error_msg or "does not exist" in error_msg:
+                yield {
+                    "type": "error",
+                    "message": "O RAG store não existe ou está inacessível. Por favor, crie uma nova sessão de chat com documentos válidos."
+                }
+            elif "PERMISSION_DENIED" in error_msg:
+                yield {
+                    "type": "error",
+                    "message": "Sem permissão para acessar o RAG store. Por favor, crie uma nova sessão de chat."
+                }
+            elif "UNAVAILABLE" in error_msg or "overloaded" in error_msg:
+                yield {
+                    "type": "error",
+                    "message": "O serviço do Gemini está temporariamente indisponível. Por favor, tente novamente em alguns instantes."
+                }
+            else:
+                yield {
+                    "type": "error",
+                    "message": f"Erro ao realizar query com RAG: {error_msg}"
+                }
 
     async def generate_example_questions(self, rag_store_name: str) -> list[str]:
         """
