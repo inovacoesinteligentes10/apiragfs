@@ -40,26 +40,38 @@ async def process_document_background(
             DocumentStatus.EXTRACTING, 20, "Verificando RAG Store global...", document_id
         )
 
-        # Verificar se já existe um RAG Store global para o usuário
+        # Buscar informações do department/store
+        store_info = await db.fetch_one(
+            """
+            SELECT name, display_name FROM rag_stores
+            WHERE user_id = $1 AND name = $2
+            """,
+            user_id, metadata.get('department', 'geral') if metadata else 'geral'
+        )
+
+        department = store_info['name'] if store_info else 'geral'
+        department_display = store_info['display_name'] if store_info else 'Geral'
+
+        # Verificar se já existe RAG Store para este department
         existing_rag_store = await db.fetch_one(
             """
             SELECT rag_store_name FROM documents
-            WHERE user_id = $1 AND rag_store_name IS NOT NULL
+            WHERE user_id = $1 AND department = $2 AND rag_store_name IS NOT NULL
             LIMIT 1
             """,
-            user_id
+            user_id, department
         )
 
         if existing_rag_store and existing_rag_store['rag_store_name']:
-            # Usar RAG Store existente
+            # Usar RAG Store existente do department
             rag_store_name = existing_rag_store['rag_store_name']
-            print(f"📦 Usando RAG Store existente: {rag_store_name}")
+            print(f"📦 Usando RAG Store de {department_display}: {rag_store_name}")
         else:
-            # Criar novo RAG Store global para o usuário
+            # Criar novo RAG Store para este department
             rag_store_name = await gemini_service.create_rag_store(
-                display_name=f"RAG Store - {user_id}"
+                display_name=f"{department_display} - {user_id}"
             )
-            print(f"✨ Novo RAG Store criado: {rag_store_name}")
+            print(f"✨ Novo RAG Store criado para {department_display}: {rag_store_name}")
 
         # Status: Fazendo upload para Gemini (50%)
         await db.execute(
@@ -131,11 +143,11 @@ async def process_document_background(
                 UPDATE documents
                 SET status = $1, progress_percent = $2, status_message = $3,
                     processing_time = $4, extraction_method = $5,
-                    rag_store_name = $6, updated_at = NOW()
-                WHERE id = $7
+                    rag_store_name = $6, department = $7, updated_at = NOW()
+                WHERE id = $8
                 """,
                 DocumentStatus.COMPLETED, 100, "Processamento concluído",
-                processing_time, "Gemini File API", rag_store_name, document_id
+                processing_time, "Gemini File API", rag_store_name, department, document_id
             )
 
             # Gerar insights em background e cachear por 24 horas
