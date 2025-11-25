@@ -3,7 +3,33 @@
  * SPDX-License-Identifier: Apache-2.0
 */
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { apiService } from '../services/apiService';
+
+const DEFAULT_SYSTEM_PROMPT = `# ApiRAGFS - Assistente RAG com Google Gemini File Search
+
+## IDENTIDADE
+Voce e o **ApiRAGFS**, assistente especializado em busca e recuperacao de informacoes em documentos usando RAG (Retrieval-Augmented Generation).
+
+## REGRA DE OURO - FIDELIDADE ABSOLUTA
+**CRÍTICO**: Responda EXCLUSIVAMENTE com base nos documentos fornecidos pelo sistema RAG.
+
+### Quando a informacao ESTÁ nos documentos:
+- Cite LITERALMENTE, preservando formatacao, numeracao e estrutura
+- Para dados estruturados (listas, objetivos, requisitos): forneça TODOS os itens SEM resumo
+- Use **negrito** para termos-chave e titulos de secoes
+
+### Quando a informacao NÃO ESTÁ nos documentos:
+Declare explicitamente: "Nao encontrei essa informacao especifica nos documentos disponiveis. Voce pode reformular a pergunta ou fornecer mais contexto."
+
+### PROIBIÇÕES ABSOLUTAS:
+❌ NUNCA adicione conhecimento externo ou use treinamento previo
+❌ NUNCA resuma dados estruturados (OE1, OE2, requisitos, etc)
+❌ NUNCA invente informacoes ou "preencha lacunas"
+❌ NUNCA use frases genericas como "busca desenvolver", "e fundamental", "visa integrar"
+
+---
+Responda seguindo rigorosamente estas diretrizes. Lembre-se: FIDELIDADE AO DOCUMENTO e prioridade maxima.`;
 
 const Settings: React.FC = () => {
     const [settings, setSettings] = useState({
@@ -15,12 +41,66 @@ const Settings: React.FC = () => {
         theme: 'light',
         notifications: true,
         autoSave: true,
-        contextWindow: 8192
+        contextWindow: 8192,
+        systemPrompt: DEFAULT_SYSTEM_PROMPT
     });
 
-    const handleSave = () => {
-        console.log('Salvando configurações:', settings);
-        alert('Configurações salvas com sucesso!');
+    const [loading, setLoading] = useState(false);
+    const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'success' | 'error'>('idle');
+
+    // Carregar system prompt do backend ao montar o componente
+    useEffect(() => {
+        loadSystemPrompt();
+    }, []);
+
+    const loadSystemPrompt = async () => {
+        try {
+            setLoading(true);
+            const response = await apiService.getSystemPrompt();
+            setSettings(prev => ({
+                ...prev,
+                systemPrompt: response.system_prompt
+            }));
+        } catch (error) {
+            console.error('Erro ao carregar system prompt:', error);
+            // Manter o padrão se falhar
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const handleSave = async () => {
+        try {
+            setSaveStatus('saving');
+            await apiService.updateSystemPrompt(settings.systemPrompt);
+            setSaveStatus('success');
+            setTimeout(() => setSaveStatus('idle'), 3000);
+        } catch (error) {
+            console.error('Erro ao salvar configurações:', error);
+            setSaveStatus('error');
+            setTimeout(() => setSaveStatus('idle'), 3000);
+        }
+    };
+
+    const handleReset = async () => {
+        if (!confirm('Tem certeza que deseja restaurar o system prompt para o padrão?')) {
+            return;
+        }
+
+        try {
+            setLoading(true);
+            const response = await apiService.resetSystemPrompt();
+            setSettings(prev => ({
+                ...prev,
+                systemPrompt: response.system_prompt
+            }));
+            alert('System prompt restaurado com sucesso!');
+        } catch (error) {
+            console.error('Erro ao resetar system prompt:', error);
+            alert('Erro ao restaurar configurações padrão');
+        } finally {
+            setLoading(false);
+        }
     };
 
     return (
@@ -118,6 +198,49 @@ const Settings: React.FC = () => {
                     </div>
                 </div>
 
+                {/* System Prompt Configuration */}
+                <div className="bg-white rounded-xl shadow-md border border-slate-200 p-6 mb-6">
+                    <h3 className="text-lg font-bold text-slate-800 mb-4 flex items-center">
+                        <svg className="w-5 h-5 mr-2 text-orange-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                        </svg>
+                        System Prompt do RAG
+                    </h3>
+                    <div className="space-y-4">
+                        <div>
+                            <label className="block text-sm font-medium text-slate-700 mb-2">
+                                Prompt do Sistema
+                                {loading && (
+                                    <span className="ml-2 text-xs text-blue-600">Carregando...</span>
+                                )}
+                            </label>
+                            <textarea
+                                value={settings.systemPrompt}
+                                onChange={(e) => setSettings({ ...settings, systemPrompt: e.target.value })}
+                                rows={15}
+                                disabled={loading}
+                                className="w-full px-4 py-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 font-mono text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+                                placeholder="Digite o prompt do sistema..."
+                            />
+                            <p className="text-xs text-slate-500 mt-2">
+                                Este prompt define o comportamento do assistente RAG. Ele será usado em todas as consultas aos documentos.
+                            </p>
+                        </div>
+                        <div className="flex items-start space-x-2 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
+                            <svg className="w-5 h-5 text-yellow-600 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                            </svg>
+                            <div>
+                                <h4 className="text-sm font-medium text-yellow-800">Atenção</h4>
+                                <p className="text-xs text-yellow-700 mt-1">
+                                    Alterar o prompt do sistema pode afetar significativamente a qualidade e o comportamento das respostas.
+                                    Mantenha instruções claras sobre fidelidade aos documentos fornecidos.
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
                 {/* General Settings */}
                 <div className="bg-white rounded-xl shadow-md border border-slate-200 p-6 mb-6">
                     <h3 className="text-lg font-bold text-slate-800 mb-4 flex items-center">
@@ -193,14 +316,28 @@ const Settings: React.FC = () => {
 
                 {/* Action Buttons */}
                 <div className="flex justify-between items-center">
-                    <button className="px-6 py-2 bg-slate-200 text-slate-700 rounded-lg hover:bg-slate-300 transition-all">
-                        Restaurar Padrões
+                    <button
+                        onClick={handleReset}
+                        disabled={loading}
+                        className="px-6 py-2 bg-slate-200 text-slate-700 rounded-lg hover:bg-slate-300 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                        {loading ? 'Carregando...' : 'Restaurar Padrões'}
                     </button>
                     <button
                         onClick={handleSave}
-                        className="px-6 py-2 bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-lg hover:from-blue-700 hover:to-purple-700 transition-all shadow-lg hover:shadow-xl"
+                        disabled={saveStatus === 'saving'}
+                        className={`px-6 py-2 rounded-lg transition-all shadow-lg hover:shadow-xl ${
+                            saveStatus === 'success'
+                                ? 'bg-green-600 text-white'
+                                : saveStatus === 'error'
+                                ? 'bg-red-600 text-white'
+                                : 'bg-gradient-to-r from-blue-600 to-purple-600 text-white hover:from-blue-700 hover:to-purple-700'
+                        } disabled:opacity-50 disabled:cursor-not-allowed`}
                     >
-                        Salvar Configurações
+                        {saveStatus === 'saving' && 'Salvando...'}
+                        {saveStatus === 'success' && '✓ Salvo com sucesso!'}
+                        {saveStatus === 'error' && '✗ Erro ao salvar'}
+                        {saveStatus === 'idle' && 'Salvar Configurações'}
                     </button>
                 </div>
             </div>

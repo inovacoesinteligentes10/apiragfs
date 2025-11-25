@@ -3,6 +3,7 @@ Serviço de integracao com Google Gemini File Search API (RAG)
 """
 import asyncio
 import json
+import re
 import time
 from typing import Optional
 from google import genai
@@ -525,7 +526,18 @@ Gere agora os 3 insights baseados nos documentos fornecidos:"""
             parsed_data = json.loads(json_text)
 
             if isinstance(parsed_data, list):
-                return parsed_data[:3]  # Limitar a 3 insights
+                # Processar insights e adicionar numeração incremental
+                processed_insights = []
+                for idx, insight in enumerate(parsed_data[:3], start=1):
+                    # Remover qualquer numeração existente do início
+                    if 'title' in insight:
+                        insight['title'] = re.sub(r'^\d+\.\s*', '', insight['title'])
+                    if 'description' in insight:
+                        # Adicionar numeração incremental ao início do description
+                        clean_desc = re.sub(r'^\d+\.\s*', '', insight['description'])
+                        insight['description'] = f"{idx}. {clean_desc}"
+                    processed_insights.append(insight)
+                return processed_insights
 
             return []
 
