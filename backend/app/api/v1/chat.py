@@ -456,19 +456,21 @@ async def get_session_insights(
         raise HTTPException(status_code=404, detail="Sessão não encontrada")
 
     try:
-        # Verificar cache primeiro
+        # Verificar cache primeiro (insights são gerados após upload)
         cache_key = f"insights:{session['rag_store_name']}"
         cached_insights = await redis_client.get(cache_key)
 
         if cached_insights:
+            print(f"✅ Insights retornados do cache para: {session['rag_store_name']}")
             return json.loads(cached_insights)
 
-        # Gerar insights usando Gemini
+        # Se não estiver em cache, gerar agora (fallback)
+        print(f"⚠️ Cache miss - Gerando insights sob demanda para: {session['rag_store_name']}")
         gemini_service = GeminiService()
         insights = await gemini_service.generate_insights(session['rag_store_name'])
 
-        # Cachear por 1 hora (3600 segundos)
-        await redis_client.set(cache_key, json.dumps(insights), 3600)
+        # Cachear por 24 horas (86400 segundos)
+        await redis_client.set(cache_key, json.dumps(insights), 86400)
 
         return insights
 
