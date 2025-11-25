@@ -11,6 +11,7 @@ import json
 from ...config import settings
 from ...config.database import db
 from ...config.minio import minio_client
+from ...config.redis import redis_client
 from ...schemas.document import DocumentCreate, DocumentResponse, DocumentStatus
 from ...services.gemini_service import GeminiService
 
@@ -136,6 +137,19 @@ async def process_document_background(
                 DocumentStatus.COMPLETED, 100, "Processamento concluído",
                 processing_time, "Gemini File API", rag_store_name, document_id
             )
+
+            # Gerar insights em background e cachear por 24 horas
+            try:
+                print(f"🔍 Gerando insights para RAG Store: {rag_store_name}")
+                insights = await gemini_service.generate_insights(rag_store_name)
+
+                if insights:
+                    cache_key = f"insights:{rag_store_name}"
+                    # Cache por 24 horas (86400 segundos)
+                    await redis_client.set(cache_key, json.dumps(insights), 86400)
+                    print(f"✅ Insights gerados e cacheados: {len(insights)} insights")
+            except Exception as e:
+                print(f"⚠️ Erro ao gerar insights (não crítico): {str(e)}")
 
         finally:
             # Limpar arquivo temporário
@@ -318,6 +332,12 @@ async def delete_document(
             "DELETE FROM documents WHERE id = $1",
             document_id
         )
+
+        # Invalidar cache de insights do RAG Store
+        if document.get('rag_store_name'):
+            cache_key = f"insights:{document['rag_store_name']}"
+            await redis_client.delete(cache_key)
+            print(f"🗑️ Cache de insights invalidado para: {document['rag_store_name']}")
 
         return {"message": "Documento deletado com sucesso"}
 
