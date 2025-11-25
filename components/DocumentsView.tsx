@@ -6,6 +6,7 @@
 import React from 'react';
 import DocumentsTable from './DocumentsTable';
 import { ProcessedDocument } from '../types';
+import { RagStore } from '../services/apiService';
 
 interface DocumentsViewProps {
     files: File[];
@@ -17,6 +18,10 @@ interface DocumentsViewProps {
     isUploading: boolean;
     processedDocuments: ProcessedDocument[];
     onDeleteDocument: (id: string) => void;
+    onMoveDocumentStore?: (documentId: string, targetStore: string) => void;
+    stores?: RagStore[];
+    selectedStore?: RagStore | null;
+    onSelectStore?: (store: RagStore) => void;
 }
 
 const DocumentsView: React.FC<DocumentsViewProps> = ({
@@ -28,7 +33,11 @@ const DocumentsView: React.FC<DocumentsViewProps> = ({
     apiKeyError,
     isUploading,
     processedDocuments,
-    onDeleteDocument
+    onDeleteDocument,
+    onMoveDocumentStore,
+    stores = [],
+    selectedStore = null,
+    onSelectStore
 }) => {
     const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         if (e.target.files) {
@@ -62,6 +71,54 @@ const DocumentsView: React.FC<DocumentsViewProps> = ({
                     Faça upload de seus documentos para análise com IA
                 </p>
             </div>
+
+            {/* Store Selector */}
+            {stores.length > 0 && onSelectStore && (
+                <div className="bg-white rounded-xl shadow-lg p-6 mb-6">
+                    <div className="flex items-center justify-between">
+                        <div className="flex-1">
+                            <label className="block text-sm font-semibold text-slate-700 mb-3">
+                                Selecione o Store/Departamento para Upload
+                            </label>
+                            <div className="flex flex-wrap gap-3">
+                                {stores.map((store) => {
+                                    const getColorClass = (color: string | null) => {
+                                        switch (color) {
+                                            case 'blue': return 'from-blue-500 to-blue-600';
+                                            case 'purple': return 'from-purple-500 to-purple-600';
+                                            case 'green': return 'from-green-500 to-green-600';
+                                            case 'red': return 'from-red-500 to-red-600';
+                                            case 'yellow': return 'from-yellow-500 to-yellow-600';
+                                            case 'orange': return 'from-orange-500 to-orange-600';
+                                            case 'pink': return 'from-pink-500 to-pink-600';
+                                            default: return 'from-gray-500 to-gray-600';
+                                        }
+                                    };
+
+                                    return (
+                                        <button
+                                            key={store.id}
+                                            onClick={() => onSelectStore(store)}
+                                            className={`flex items-center space-x-2 px-4 py-2 rounded-lg font-medium transition-all ${
+                                                selectedStore?.id === store.id
+                                                    ? `bg-gradient-to-r ${getColorClass(store.color)} text-white shadow-md`
+                                                    : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                                            }`}
+                                        >
+                                            <span>{store.display_name}</span>
+                                        </button>
+                                    );
+                                })}
+                            </div>
+                            {selectedStore && (
+                                <p className="mt-3 text-sm text-slate-600">
+                                    Os documentos serão enviados para: <span className="font-semibold text-slate-800">{selectedStore.display_name}</span>
+                                </p>
+                            )}
+                        </div>
+                    </div>
+                </div>
+            )}
 
             {/* API Error Warning */}
             {apiKeyError && (
@@ -211,6 +268,8 @@ const DocumentsView: React.FC<DocumentsViewProps> = ({
                     <DocumentsTable
                         documents={processedDocuments}
                         onDelete={onDeleteDocument}
+                        availableStores={stores.map(s => ({ name: s.name, display_name: s.display_name }))}
+                        onMoveStore={onMoveDocumentStore}
                     />
                 </>
             )}

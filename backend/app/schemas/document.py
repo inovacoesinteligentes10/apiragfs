@@ -39,6 +39,7 @@ class DocumentResponse(BaseModel):
     minio_bucket: str
     text_length: Optional[int] = None
     extraction_method: Optional[str] = None
+    department: Optional[str] = None
     chunks: Optional[int] = None
     processing_time: Optional[int] = None
     status: str

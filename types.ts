@@ -52,6 +52,8 @@ export interface ProcessedDocument {
     size: number;
     textLength: number | null;
     extractionMethod: string | null;
+    department?: string | null;
+    departmentDisplayName?: string | null;
     chunks: number | null;
     processingTime: number | null;
     status: 'uploaded' | 'extracting' | 'chunking' | 'embedding' | 'indexing' | 'completed' | 'error';

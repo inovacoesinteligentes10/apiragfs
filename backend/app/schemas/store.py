@@ -1,9 +1,10 @@
 """
 Schemas Pydantic para RAG Stores/Departments
 """
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from typing import Optional
 from datetime import datetime
+from uuid import UUID
 
 
 class StoreBase(BaseModel):
@@ -27,6 +28,14 @@ class StoreResponse(StoreBase):
     document_count: int
     created_at: datetime
     updated_at: datetime
+
+    @field_validator('id', mode='before')
+    @classmethod
+    def convert_uuid_to_str(cls, v):
+        """Converter UUID para string"""
+        if isinstance(v, UUID):
+            return str(v)
+        return v
 
     class Config:
         from_attributes = True

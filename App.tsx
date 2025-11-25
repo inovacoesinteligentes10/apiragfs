@@ -6,7 +6,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { AppStatus, ChatMessage, ProcessedDocument } from './types';
 import * as geminiService from './services/geminiService';
-import { apiService } from './services/apiService';
+import { apiService, RagStore } from './services/apiService';
 import Spinner from './components/Spinner';
 import Sidebar from './components/Sidebar';
 import Dashboard from './components/Dashboard';
@@ -17,6 +17,8 @@ import ChatInterface from './components/ChatInterface';
 import Analytics from './components/Analytics';
 import StatusView from './components/StatusView';
 import Settings from './components/Settings';
+import StoreManagement from './components/StoreManagement';
+import DeleteConfirmationModal from './components/DeleteConfirmationModal';
 
 // DO: Define the AIStudio interface to resolve a type conflict where `window.aistudio` was being redeclared with an anonymous type.
 // FIX: Moved the AIStudio interface definition inside the `declare global` block to resolve a TypeScript type conflict.
@@ -31,7 +33,7 @@ declare global {
 }
 
 const App: React.FC = () => {
-    const [currentView, setCurrentView] = useState<'dashboard' | 'documents' | 'chat' | 'analytics' | 'status' | 'settings'>('dashboard');
+    const [currentView, setCurrentView] = useState<'dashboard' | 'documents' | 'chat' | 'analytics' | 'status' | 'settings' | 'stores'>('dashboard');
     const [status, setStatus] = useState<AppStatus>(AppStatus.Welcome);
     const [isApiKeySelected, setIsApiKeySelected] = useState(false);
     const [apiKeyError, setApiKeyError] = useState<string | null>(null);
@@ -44,7 +46,22 @@ const App: React.FC = () => {
     const [insights, setInsights] = useState<Array<{title: string, description: string, icon: string}>>([]);
     const [files, setFiles] = useState<File[]>([]);
     const [processedDocuments, setProcessedDocuments] = useState<ProcessedDocument[]>([]);
+    const [ragStores, setRagStores] = useState<RagStore[]>([]);
+    const [selectedStore, setSelectedStore] = useState<RagStore | null>(null);
     const ragStoreNameRef = useRef(activeRagStoreName);
+
+    // Estado para o modal de confirmação de exclusão
+    const [deleteModal, setDeleteModal] = useState<{
+        isOpen: boolean;
+        documentId: string | null;
+        documentName: string | null;
+        isDeleting: boolean;
+    }>({
+        isOpen: false,
+        documentId: null,
+        documentName: null,
+        isDeleting: false
+    });
 
     useEffect(() => {
         ragStoreNameRef.current = activeRagStoreName;
@@ -124,6 +141,11 @@ const App: React.FC = () => {
         const loadDocuments = async () => {
             try {
                 const docs = await apiService.listDocuments();
+
+                // Buscar stores para mapear department -> display_name
+                const stores = ragStores.length > 0 ? ragStores : await apiService.listRagStores();
+                const storeMap = new Map(stores.map(s => [s.name, s.display_name]));
+
                 const processedDocs: ProcessedDocument[] = docs.map(doc => ({
                     id: doc.id,
                     name: doc.name,
@@ -131,6 +153,8 @@ const App: React.FC = () => {
                     size: doc.size,
                     textLength: doc.text_length,
                     extractionMethod: doc.extraction_method,
+                    department: doc.department || null,
+                    departmentDisplayName: doc.department ? storeMap.get(doc.department) || doc.department : null,
                     chunks: doc.chunks,
                     processingTime: doc.processing_time,
                     status: doc.status,
@@ -147,6 +171,27 @@ const App: React.FC = () => {
         };
 
         loadDocuments();
+    }, [ragStores]);
+
+    // Carregar RAG stores disponíveis
+    useEffect(() => {
+        const loadStores = async () => {
+            try {
+                const stores = await apiService.listRagStores();
+                console.log('📦 RAG Stores carregados:', stores);
+                setRagStores(stores);
+
+                // Selecionar o primeiro store com documentos por padrão
+                if (stores.length > 0 && !selectedStore) {
+                    const storeWithDocs = stores.find(s => s.document_count > 0) || stores[0];
+                    setSelectedStore(storeWithDocs);
+                }
+            } catch (err) {
+                console.error('Erro ao carregar stores:', err);
+            }
+        };
+
+        loadStores();
     }, []);
 
     // Polling para atualizar status de documentos em processamento
@@ -164,15 +209,23 @@ const App: React.FC = () => {
                 for (const doc of processingDocs) {
                     const updatedDoc = await apiService.getDocument(doc.id);
 
-                    // Verificar se o status mudou de processing para completed
-                    const wasProcessing = doc.status === 'processing';
+                    // Verificar se o status mudou de qualquer estado de processamento para completed
+                    const wasProcessing = doc.status !== 'completed' && doc.status !== 'error';
                     const isNowCompleted = updatedDoc.status === 'completed';
+
+                    // Mapear department -> display_name
+                    const storeMap = new Map(ragStores.map(s => [s.name, s.display_name]));
+                    const departmentDisplayName = updatedDoc.department
+                        ? storeMap.get(updatedDoc.department) || updatedDoc.department
+                        : null;
 
                     setProcessedDocuments(prev => prev.map(d =>
                         d.id === doc.id ? {
                             ...d,
                             textLength: updatedDoc.text_length,
                             extractionMethod: updatedDoc.extraction_method,
+                            department: updatedDoc.department || null,
+                            departmentDisplayName: departmentDisplayName,
                             chunks: updatedDoc.chunks,
                             processingTime: updatedDoc.processing_time,
                             status: updatedDoc.status,
@@ -261,8 +314,12 @@ const App: React.FC = () => {
                 }));
 
                 try {
-                    // Upload via API backend
-                    const uploadedDoc = await apiService.uploadDocument(file);
+                    // Upload via API backend com department do store selecionado
+                    const department = selectedStore?.name || 'geral';
+                    const uploadedDoc = await apiService.uploadDocument(file, department);
+
+                    // Buscar display_name do department
+                    const storeMap = new Map(ragStores.map(s => [s.name, s.display_name]));
 
                     // Criar documento processado para exibição
                     const doc: ProcessedDocument = {
@@ -272,6 +329,8 @@ const App: React.FC = () => {
                         size: uploadedDoc.size,
                         textLength: uploadedDoc.text_length,
                         extractionMethod: uploadedDoc.extraction_method,
+                        department: uploadedDoc.department || department,
+                        departmentDisplayName: storeMap.get(uploadedDoc.department || department) || department,
                         chunks: uploadedDoc.chunks,
                         processingTime: uploadedDoc.processing_time,
                         status: uploadedDoc.status,
@@ -308,6 +367,22 @@ const App: React.FC = () => {
             setUploadProgress({ current: totalSteps, total: totalSteps, message: "Upload concluído!", fileName: "" });
             await new Promise(resolve => setTimeout(resolve, 1000));
 
+            // Recarregar stores para atualizar contagem de documentos
+            try {
+                const updatedStores = await apiService.listRagStores();
+                setRagStores(updatedStores);
+
+                // Atualizar o store selecionado com os dados mais recentes
+                if (selectedStore) {
+                    const updatedSelectedStore = updatedStores.find(s => s.id === selectedStore.id);
+                    if (updatedSelectedStore) {
+                        setSelectedStore(updatedSelectedStore);
+                    }
+                }
+            } catch (err) {
+                console.error('Erro ao recarregar stores:', err);
+            }
+
             // Limpar arquivos selecionados e voltar ao estado normal
             setFiles([]);
             setStatus(AppStatus.Welcome);
@@ -318,13 +393,199 @@ const App: React.FC = () => {
         }
     };
 
-    const handleDeleteDocument = async (id: string) => {
+    const handleDeleteDocument = (id: string) => {
+        // Encontrar o documento para obter o nome
+        const document = processedDocuments.find(doc => doc.id === id);
+
+        // Abrir modal de confirmação
+        setDeleteModal({
+            isOpen: true,
+            documentId: id,
+            documentName: document?.name || 'Documento desconhecido',
+            isDeleting: false
+        });
+    };
+
+    const confirmDeleteDocument = async () => {
+        if (!deleteModal.documentId) return;
+
+        // Marcar como deletando
+        setDeleteModal(prev => ({ ...prev, isDeleting: true }));
+
         try {
-            await apiService.deleteDocument(id);
-            setProcessedDocuments(prev => prev.filter(doc => doc.id !== id));
+            await apiService.deleteDocument(deleteModal.documentId);
+            setProcessedDocuments(prev => prev.filter(doc => doc.id !== deleteModal.documentId));
+
+            // Recarregar stores para atualizar contagem
+            try {
+                const updatedStores = await apiService.listRagStores();
+                setRagStores(updatedStores);
+
+                if (selectedStore) {
+                    const updatedSelectedStore = updatedStores.find(s => s.id === selectedStore.id);
+                    if (updatedSelectedStore) {
+                        setSelectedStore(updatedSelectedStore);
+                    }
+                }
+            } catch (err) {
+                console.error('Erro ao recarregar stores:', err);
+            }
+
+            // Fechar modal
+            setDeleteModal({
+                isOpen: false,
+                documentId: null,
+                documentName: null,
+                isDeleting: false
+            });
         } catch (err) {
             console.error('Erro ao deletar documento:', err);
+            setDeleteModal(prev => ({ ...prev, isDeleting: false }));
             alert('Erro ao deletar documento. Por favor, tente novamente.');
+        }
+    };
+
+    const cancelDeleteDocument = () => {
+        setDeleteModal({
+            isOpen: false,
+            documentId: null,
+            documentName: null,
+            isDeleting: false
+        });
+    };
+
+    const handleMoveDocumentStore = async (documentId: string, targetStore: string) => {
+        try {
+            // Chamar API para mover documento
+            await apiService.moveDocumentToStore(documentId, targetStore);
+
+            // Atualizar documento localmente para mostrar status de reprocessamento
+            // Resetar todos os campos de processamento
+            setProcessedDocuments(prev => prev.map(doc =>
+                doc.id === documentId
+                    ? {
+                        ...doc,
+                        department: targetStore,
+                        status: 'uploaded',
+                        progressPercent: 0,
+                        statusMessage: null,
+                        error: null,
+                        ragStoreName: null,
+                        textLength: null,
+                        chunks: null,
+                        processingTime: null,
+                        extractionMethod: null
+                    }
+                    : doc
+            ));
+
+            // Recarregar stores para atualizar contagens
+            try {
+                const updatedStores = await apiService.listRagStores();
+                setRagStores(updatedStores);
+
+                if (selectedStore) {
+                    const updatedSelectedStore = updatedStores.find(s => s.id === selectedStore.id);
+                    if (updatedSelectedStore) {
+                        setSelectedStore(updatedSelectedStore);
+                    }
+                }
+            } catch (err) {
+                console.error('Erro ao recarregar stores:', err);
+            }
+        } catch (err) {
+            console.error('Erro ao mover documento:', err);
+            alert('Erro ao mover documento. Por favor, tente novamente.');
+        }
+    };
+
+    const handleSelectStore = async (store: RagStore) => {
+        console.log('🔄 Mudando para store:', store.display_name);
+
+        // Se já está em chat, reiniciar com o novo store
+        if (status === AppStatus.Chatting) {
+            // Encerrar chat atual
+            if (activeRagStoreName) {
+                apiService.deleteChatSession(activeRagStoreName).catch(err => {
+                    console.error("Falha ao deletar sessão de chat:", err);
+                });
+            }
+
+            setActiveRagStoreName(null);
+            setChatHistory([]);
+            setExampleQuestions([]);
+            setInsights([]);
+            setStatus(AppStatus.Welcome);
+        }
+
+        // Atualizar store selecionado
+        setSelectedStore(store);
+
+        // Se estiver na view de chat, iniciar automaticamente com o novo store
+        if (currentView === 'chat' && store.rag_store_name) {
+            await handleStartChatWithStore(store);
+        }
+    };
+
+    const handleStartChatWithStore = async (store: RagStore) => {
+        // Verificar se o store tem documentos
+        if (!store.rag_store_name || store.document_count === 0) {
+            alert('Este store ainda não possui documentos. Faça upload de documentos antes de iniciar o chat.');
+            setCurrentView('documents');
+            return;
+        }
+
+        try {
+            console.log('🚀 Iniciando chat com store:', store.display_name);
+            setStatus(AppStatus.Uploading);
+            setUploadProgress({ current: 0, total: 3, message: "Criando sessão de chat..." });
+
+            // Criar sessão de chat no backend com o RAG store selecionado
+            const session = await apiService.createChatSession(store.rag_store_name);
+            console.log('✅ Sessão criada:', session);
+
+            setUploadProgress({ current: 1, total: 3, message: "Carregando histórico..." });
+
+            // Buscar mensagens anteriores (se existir histórico)
+            const messages = await apiService.getSessionMessages(session.id);
+            const formattedHistory: ChatMessage[] = messages.map(msg => ({
+                role: msg.role,
+                parts: [{ text: msg.content }],
+                groundingChunks: msg.grounding_chunks ? msg.grounding_chunks.map((chunk: any) => ({
+                    retrievedContext: { text: chunk.text || '' }
+                })) : undefined
+            }));
+
+            setUploadProgress({ current: 2, total: 3, message: "Preparando chat..." });
+
+            // Configurar estado do chat
+            setActiveRagStoreName(session.id);
+            setChatHistory(formattedHistory);
+            setExampleQuestions([]);
+
+            setUploadProgress({ current: 3, total: 3, message: "Pronto!" });
+
+            // Buscar insights dos documentos
+            try {
+                const sessionInsights = await apiService.getSessionInsights(session.id);
+                setInsights(sessionInsights);
+            } catch (err) {
+                console.error('Erro ao buscar insights:', err);
+                setInsights([]);
+            }
+
+            await new Promise(resolve => setTimeout(resolve, 500));
+
+            // Mudar para view de chat
+            setStatus(AppStatus.Chatting);
+            setCurrentView('chat');
+        } catch (err) {
+            console.error('❌ Erro ao iniciar chat:', err);
+            const errorMessage = err instanceof Error ? err.message : String(err);
+            alert(`Erro ao iniciar chat: ${errorMessage}`);
+            setStatus(AppStatus.Welcome);
+        } finally {
+            setUploadProgress(null);
         }
     };
 
@@ -332,7 +593,13 @@ const App: React.FC = () => {
         try {
             console.log('🚀 Iniciando chat...');
 
-            // Verificar se há documentos completados
+            // Se há um store selecionado, usar ele
+            if (selectedStore && selectedStore.rag_store_name) {
+                await handleStartChatWithStore(selectedStore);
+                return;
+            }
+
+            // Fallback: Verificar se há documentos completados (comportamento antigo)
             const completedDocs = processedDocuments.filter(doc => doc.status === 'completed');
             console.log('📄 Documentos completados:', completedDocs);
 
@@ -344,7 +611,7 @@ const App: React.FC = () => {
             setStatus(AppStatus.Uploading);
             setUploadProgress({ current: 0, total: 3, message: "Criando sessão de chat..." });
 
-            // Buscar o RAG store global do primeiro documento (todos documentos usam o mesmo RAG store global)
+            // Buscar o RAG store global do primeiro documento
             const firstDoc = completedDocs[0];
             console.log('📌 Primeiro documento:', firstDoc);
 
@@ -358,7 +625,7 @@ const App: React.FC = () => {
 
             console.log('🏪 RAG Store Name:', fullDocument.rag_store_name);
 
-            // Criar sessão de chat no backend (sem vincular a documento específico)
+            // Criar sessão de chat no backend
             const session = await apiService.createChatSession(fullDocument.rag_store_name);
             console.log('✅ Sessão criada:', session);
 
@@ -487,14 +754,48 @@ const App: React.FC = () => {
                 // onError: Tratar erros
                 (error: string) => {
                     console.error("❌ Erro ao enviar mensagem:", error);
-                    setChatHistory(prev => {
-                        const newHistory = [...prev];
-                        const lastMessage = newHistory[newHistory.length - 1];
-                        if (lastMessage && lastMessage.role === 'model') {
-                            lastMessage.parts = [{ text: "Desculpe, encontrei um erro. Por favor, tente novamente." }];
+
+                    // Verificar se é erro de RAG store inválido/inexistente
+                    const isRagStoreError = error.includes("RAG store não existe") ||
+                                          error.includes("não está acessível") ||
+                                          error.includes("INVALID_ARGUMENT") ||
+                                          error.includes("PERMISSION_DENIED");
+
+                    if (isRagStoreError) {
+                        // RAG store inválido - limpar sessão e redirecionar
+                        console.warn("⚠️ RAG store inválido detectado. Limpando sessão...");
+
+                        // Deletar sessão órfã do backend
+                        if (activeRagStoreName) {
+                            apiService.deleteChatSession(activeRagStoreName).catch(err => {
+                                console.error("Falha ao deletar sessão órfã:", err);
+                            });
                         }
-                        return newHistory;
-                    });
+
+                        setActiveRagStoreName(null);
+                        setChatHistory([]);
+                        setExampleQuestions([]);
+                        setInsights([]);
+                        setFiles([]);
+                        setStatus(AppStatus.Welcome);
+                        setCurrentView('dashboard');
+
+                        // Mostrar mensagem informativa apenas uma vez
+                        setTimeout(() => {
+                            alert("Esta sessão de chat não está mais disponível porque os documentos foram removidos. Por favor, faça upload de novos documentos para começar uma nova sessão.");
+                        }, 100);
+                    } else {
+                        // Erro genérico
+                        setChatHistory(prev => {
+                            const newHistory = [...prev];
+                            const lastMessage = newHistory[newHistory.length - 1];
+                            if (lastMessage && lastMessage.role === 'model') {
+                                lastMessage.parts = [{ text: `❌ ${error}` }];
+                            }
+                            return newHistory;
+                        });
+                    }
+
                     setIsQueryLoading(false);
                 }
             );
@@ -558,6 +859,10 @@ const App: React.FC = () => {
                 return <Dashboard
                     onNavigateToDocuments={() => setCurrentView('documents')}
                     hasDocuments={!!activeRagStoreName}
+                    stores={ragStores}
+                    onNavigateToStores={() => setCurrentView('stores')}
+                    onNavigateToChat={() => setCurrentView('chat')}
+                    onSelectStore={handleSelectStore}
                 />;
             case 'documents':
                 return <DocumentsView
@@ -570,9 +875,18 @@ const App: React.FC = () => {
                     isUploading={status === AppStatus.Uploading}
                     processedDocuments={processedDocuments}
                     onDeleteDocument={handleDeleteDocument}
+                    onMoveDocumentStore={handleMoveDocumentStore}
+                    stores={ragStores}
+                    selectedStore={selectedStore}
+                    onSelectStore={handleSelectStore}
                 />;
             case 'chat':
                 if (status === AppStatus.Chatting) {
+                    // Filtrar apenas stores com documentos para o chat
+                    const storesWithDocuments = ragStores.filter(store =>
+                        store.document_count > 0 && store.rag_store_name
+                    );
+
                     return <ChatInterface
                         history={chatHistory}
                         isQueryLoading={isQueryLoading}
@@ -580,6 +894,9 @@ const App: React.FC = () => {
                         onNewChat={handleEndChat}
                         exampleQuestions={exampleQuestions}
                         insights={insights}
+                        stores={storesWithDocuments}
+                        selectedStore={selectedStore}
+                        onSelectStore={handleSelectStore}
                     />;
                 } else {
                     // Verificar se há documentos disponíveis
@@ -629,26 +946,58 @@ const App: React.FC = () => {
                 return <StatusView />;
             case 'settings':
                 return <Settings />;
+            case 'stores':
+                return <StoreManagement />;
             default:
                 return <Dashboard
                     onNavigateToDocuments={() => setCurrentView('documents')}
                     hasDocuments={!!activeRagStoreName}
+                    stores={ragStores}
+                    onNavigateToStores={() => setCurrentView('stores')}
+                    onNavigateToChat={() => setCurrentView('chat')}
+                    onSelectStore={handleSelectStore}
                 />;
         }
     }
 
-    // Verificar se há documentos processados disponíveis para chat
-    const hasDocumentsForChat = processedDocuments.some(doc => doc.status === 'completed');
+    // Verificar se há documentos processados disponíveis para chat no store selecionado
+    const hasDocumentsForChat = React.useMemo(() => {
+        // Se não há store selecionado, desabilitar chat
+        if (!selectedStore) {
+            return false;
+        }
+
+        // Verificar se o store selecionado tem documentos completos
+        const storeHasDocuments = processedDocuments.some(doc =>
+            doc.status === 'completed' &&
+            doc.department === selectedStore.name
+        );
+
+        return storeHasDocuments || selectedStore.document_count > 0;
+    }, [selectedStore, processedDocuments]);
 
     return (
-        <main className="h-screen flex bg-slate-900">
-            <Sidebar
-                currentView={currentView}
-                onNavigate={setCurrentView}
-                hasActiveSession={status === AppStatus.Chatting || hasDocumentsForChat}
+        <>
+            <main className="h-screen flex bg-slate-900">
+                <Sidebar
+                    currentView={currentView}
+                    onNavigate={setCurrentView}
+                    hasActiveSession={status === AppStatus.Chatting || hasDocumentsForChat}
+                />
+                {renderMainContent()}
+            </main>
+
+            {/* Modal de confirmação de exclusão */}
+            <DeleteConfirmationModal
+                isOpen={deleteModal.isOpen}
+                onClose={cancelDeleteDocument}
+                onConfirm={confirmDeleteDocument}
+                title="Excluir Documento"
+                message="Tem certeza que deseja excluir este documento?"
+                documentName={deleteModal.documentName || undefined}
+                isDeleting={deleteModal.isDeleting}
             />
-            {renderMainContent()}
-        </main>
+        </>
     );
 };
 

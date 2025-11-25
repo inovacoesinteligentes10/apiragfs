@@ -6,8 +6,8 @@
 import React from 'react';
 
 interface SidebarProps {
-    currentView: 'dashboard' | 'documents' | 'chat' | 'analytics' | 'status' | 'settings';
-    onNavigate: (view: 'dashboard' | 'documents' | 'chat' | 'analytics' | 'status' | 'settings') => void;
+    currentView: 'dashboard' | 'documents' | 'chat' | 'analytics' | 'status' | 'settings' | 'stores';
+    onNavigate: (view: 'dashboard' | 'documents' | 'chat' | 'analytics' | 'status' | 'settings' | 'stores') => void;
     hasActiveSession: boolean;
 }
 
@@ -55,6 +55,20 @@ const Sidebar: React.FC<SidebarProps> = ({ currentView, onNavigate, hasActiveSes
                     icon: (
                         <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                        </svg>
+                    )
+                }
+            ]
+        },
+        {
+            title: 'Administração',
+            items: [
+                {
+                    id: 'stores' as const,
+                    label: 'Gerenciar Stores',
+                    icon: (
+                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
                         </svg>
                     )
                 }
@@ -112,34 +126,42 @@ const Sidebar: React.FC<SidebarProps> = ({ currentView, onNavigate, hasActiveSes
                         </h3>
                         <div className="space-y-1">
                             {section.items.map((item) => (
-                                <button
-                                    key={item.id}
-                                    onClick={() => !item.disabled && onNavigate(item.id)}
-                                    disabled={item.disabled}
-                                    className={`
-                                        w-full flex items-center space-x-3 px-4 py-2.5 rounded-lg transition-all duration-200
-                                        ${currentView === item.id
-                                            ? 'bg-gradient-to-r from-blue-600 to-purple-600 shadow-lg'
-                                            : item.disabled
-                                            ? 'text-slate-500 cursor-not-allowed opacity-50'
-                                            : 'hover:bg-slate-700/50 hover:shadow-md'
-                                        }
-                                    `}
-                                >
-                                    <span className={currentView === item.id ? 'text-white' : 'text-slate-300'}>
-                                        {item.icon}
-                                    </span>
-                                    <span className={`text-sm font-medium ${currentView === item.id ? 'text-white' : 'text-slate-300'}`}>
-                                        {item.label}
-                                    </span>
-                                    {item.disabled && (
-                                        <span className="ml-auto">
-                                            <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
-                                                <path fillRule="evenodd" d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 016 0z" clipRule="evenodd" />
-                                            </svg>
+                                <div key={item.id} className="relative group">
+                                    <button
+                                        onClick={() => !item.disabled && onNavigate(item.id)}
+                                        disabled={item.disabled}
+                                        className={`
+                                            w-full flex items-center space-x-3 px-4 py-2.5 rounded-lg transition-all duration-200
+                                            ${currentView === item.id
+                                                ? 'bg-gradient-to-r from-blue-600 to-purple-600 shadow-lg'
+                                                : item.disabled
+                                                ? 'text-slate-500 cursor-not-allowed opacity-50'
+                                                : 'hover:bg-slate-700/50 hover:shadow-md'
+                                            }
+                                        `}
+                                    >
+                                        <span className={currentView === item.id ? 'text-white' : 'text-slate-300'}>
+                                            {item.icon}
                                         </span>
+                                        <span className={`text-sm font-medium ${currentView === item.id ? 'text-white' : 'text-slate-300'}`}>
+                                            {item.label}
+                                        </span>
+                                        {item.disabled && (
+                                            <span className="ml-auto">
+                                                <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                                                    <path fillRule="evenodd" d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 016 0z" clipRule="evenodd" />
+                                                </svg>
+                                            </span>
+                                        )}
+                                    </button>
+                                    {item.disabled && item.id === 'chat' && (
+                                        <div className="absolute left-full ml-2 top-1/2 -translate-y-1/2 hidden group-hover:block z-50">
+                                            <div className="bg-slate-800 text-white text-xs rounded-md py-2 px-3 shadow-lg border border-slate-700 whitespace-nowrap">
+                                                Selecione um store com documentos para ativar o chat
+                                            </div>
+                                        </div>
                                     )}
-                                </button>
+                                </div>
                             ))}
                         </div>
                     </div>
