@@ -14,6 +14,7 @@ from ...config.minio import minio_client
 from ...config.redis import redis_client
 from ...schemas.document import DocumentCreate, DocumentResponse, DocumentStatus
 from ...services.gemini_service import GeminiService
+from ...middleware.auth import get_current_user
 
 router = APIRouter(tags=["Documents"])
 
@@ -318,16 +319,17 @@ async def upload_document(
     background_tasks: BackgroundTasks,
     file: UploadFile = File(...),
     metadata: Optional[str] = Form(None),
-    user_id: str = "default-user"  # TODO: Pegar do token JWT
+    current_user: dict = Depends(get_current_user)
 ):
     """
     Upload de documento com metadados opcionais
 
     Args:
         file: Arquivo para upload
-        metadata: JSON string com metadados (ex: {"author": "Nome", "category": "Categoria", "tags": ["tag1", "tag2"]})
-        user_id: ID do usuário
+        metadata: JSON string com metadados (ex: {"department": "ti", "tags": ["tag1", "tag2"]})
     """
+    user_id = current_user['id']
+
     # Validar extensão
     file_extension = f".{file.filename.split('.')[-1].lower()}" if '.' in file.filename else ''
     if file_extension not in settings.allowed_extensions:
@@ -404,22 +406,50 @@ async def upload_document(
 
 @router.get("/", response_model=List[DocumentResponse])
 async def list_documents(
-    user_id: str = "default-user",  # TODO: Pegar do token JWT
     skip: int = 0,
-    limit: int = 100
+    limit: int = 100,
+    current_user: dict = Depends(get_current_user)
 ):
     """
-    Lista documentos do usuário
+    Lista documentos do usuário.
+
+    - Admin: vê todos os documentos de todos os usuários
+    - Usuário regular: vê apenas documentos dos stores com permissão
     """
-    documents = await db.fetch_all(
-        """
-        SELECT * FROM documents
-        WHERE user_id = $1
-        ORDER BY upload_date DESC
-        LIMIT $2 OFFSET $3
-        """,
-        user_id, limit, skip
-    )
+    user_id = current_user['id']
+    role = current_user['role']
+
+    if role == 'admin':
+        # Admin vê todos os documentos
+        documents = await db.fetch_all(
+            """
+            SELECT d.*,
+                   u.name as user_name,
+                   u.email as user_email,
+                   rs.display_name as store_display_name
+            FROM documents d
+            LEFT JOIN users u ON d.user_id = u.id
+            LEFT JOIN rag_stores rs ON d.department = rs.name
+            ORDER BY d.upload_date DESC
+            LIMIT $1 OFFSET $2
+            """,
+            limit, skip
+        )
+    else:
+        # Usuário regular vê apenas documentos dos stores com permissão
+        documents = await db.fetch_all(
+            """
+            SELECT d.*,
+                   rs.display_name as store_display_name
+            FROM documents d
+            INNER JOIN rag_stores rs ON d.department = rs.name
+            INNER JOIN user_store_permissions p ON p.store_id = rs.id
+            WHERE p.user_id = $1
+            ORDER BY d.upload_date DESC
+            LIMIT $2 OFFSET $3
+            """,
+            user_id, limit, skip
+        )
 
     return [DocumentResponse(**dict(doc)) for doc in documents]
 
@@ -427,18 +457,34 @@ async def list_documents(
 @router.get("/{document_id}", response_model=DocumentResponse)
 async def get_document(
     document_id: str,
-    user_id: str = "default-user"  # TODO: Pegar do token JWT
+    current_user: dict = Depends(get_current_user)
 ):
     """
-    Busca documento por ID
+    Busca documento por ID.
+    Admin pode ver qualquer documento, usuários regulares apenas dos stores com permissão.
     """
-    document = await db.fetch_one(
-        """
-        SELECT * FROM documents
-        WHERE id = $1 AND user_id = $2
-        """,
-        document_id, user_id
-    )
+    user_id = current_user['id']
+    role = current_user['role']
+
+    if role == 'admin':
+        # Admin pode ver qualquer documento
+        document = await db.fetch_one(
+            """
+            SELECT * FROM documents WHERE id = $1
+            """,
+            document_id
+        )
+    else:
+        # Usuário regular só vê se tiver permissão no store
+        document = await db.fetch_one(
+            """
+            SELECT d.* FROM documents d
+            INNER JOIN rag_stores rs ON d.department = rs.name
+            INNER JOIN user_store_permissions p ON p.store_id = rs.id
+            WHERE d.id = $1 AND p.user_id = $2
+            """,
+            document_id, user_id
+        )
 
     if not document:
         raise HTTPException(status_code=404, detail="Documento não encontrado")
@@ -544,19 +590,33 @@ async def move_document_to_store(
 @router.delete("/{document_id}")
 async def delete_document(
     document_id: str,
-    user_id: str = "default-user"  # TODO: Pegar do token JWT
+    current_user: dict = Depends(get_current_user)
 ):
     """
-    Deleta documento
+    Deleta documento.
+    Admin pode deletar qualquer documento, usuários regulares apenas dos stores com permissão.
     """
+    user_id = current_user['id']
+    role = current_user['role']
+
     # Buscar documento
-    document = await db.fetch_one(
-        """
-        SELECT * FROM documents
-        WHERE id = $1 AND user_id = $2
-        """,
-        document_id, user_id
-    )
+    if role == 'admin':
+        document = await db.fetch_one(
+            """
+            SELECT * FROM documents WHERE id = $1
+            """,
+            document_id
+        )
+    else:
+        document = await db.fetch_one(
+            """
+            SELECT d.* FROM documents d
+            INNER JOIN rag_stores rs ON d.department = rs.name
+            INNER JOIN user_store_permissions p ON p.store_id = rs.id
+            WHERE d.id = $1 AND p.user_id = $2
+            """,
+            document_id, user_id
+        )
 
     if not document:
         raise HTTPException(status_code=404, detail="Documento não encontrado")
