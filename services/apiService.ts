@@ -137,9 +137,13 @@ class ApiService {
     }
 
     /**
-     * Upload de documento
+     * Upload de documento com progress tracking
      */
-    async uploadDocument(file: File, department?: string): Promise<DocumentUploadResponse> {
+    async uploadDocument(
+        file: File,
+        department?: string,
+        onProgress?: (progress: number, status: string, statusMessage?: string) => void
+    ): Promise<DocumentUploadResponse> {
         const formData = new FormData();
         formData.append('file', file);
 
@@ -149,6 +153,7 @@ class ApiService {
             formData.append('metadata', JSON.stringify(metadata));
         }
 
+        // Iniciar upload
         const response = await fetch(`${this.baseUrl}/api/v1/documents/upload`, {
             method: 'POST',
             body: formData,
@@ -159,7 +164,81 @@ class ApiService {
             throw new Error(error.detail || 'Erro ao fazer upload');
         }
 
-        return response.json();
+        const document = await response.json();
+
+        // Se callback de progresso foi fornecido, fazer polling de status
+        if (onProgress) {
+            await this.pollDocumentStatus(document.id, onProgress);
+        }
+
+        return document;
+    }
+
+    /**
+     * Faz polling do status do documento até completar ou falhar
+     */
+    private async pollDocumentStatus(
+        documentId: string,
+        onProgress: (progress: number, status: string, statusMessage?: string) => void
+    ): Promise<void> {
+        let attempts = 0;
+        const maxAttempts = 60; // 5 minutos (5s * 60)
+        const pollInterval = 5000; // 5 segundos
+
+        while (attempts < maxAttempts) {
+            try {
+                await new Promise(resolve => setTimeout(resolve, pollInterval));
+
+                const doc = await this.getDocument(documentId);
+
+                // Calcular progresso baseado no status
+                let progress = doc.progress_percent || 0;
+
+                // Se não houver progress_percent, estimar baseado no status
+                if (!doc.progress_percent) {
+                    switch (doc.status) {
+                        case 'uploaded':
+                            progress = 10;
+                            break;
+                        case 'extracting':
+                            progress = 30;
+                            break;
+                        case 'chunking':
+                            progress = 50;
+                            break;
+                        case 'embedding':
+                            progress = 70;
+                            break;
+                        case 'indexing':
+                            progress = 90;
+                            break;
+                        case 'completed':
+                            progress = 100;
+                            break;
+                        case 'error':
+                            progress = 0;
+                            break;
+                    }
+                }
+
+                // Notificar progresso
+                onProgress(progress, doc.status, doc.status_message || undefined);
+
+                // Verificar se terminou (sucesso ou erro)
+                if (doc.status === 'completed' || doc.status === 'error') {
+                    break;
+                }
+
+                attempts++;
+            } catch (error) {
+                console.error('Erro ao verificar status do documento:', error);
+                attempts++;
+            }
+        }
+
+        if (attempts >= maxAttempts) {
+            throw new Error('Timeout ao processar documento');
+        }
     }
 
     /**

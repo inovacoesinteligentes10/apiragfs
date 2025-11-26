@@ -316,7 +316,28 @@ const App: React.FC = () => {
                 try {
                     // Upload via API backend com department do store selecionado
                     const department = selectedStore?.name || 'geral';
-                    const uploadedDoc = await apiService.uploadDocument(file, department);
+
+                    // Callback de progresso real
+                    const onProgress = (progress: number, status: string, statusMessage?: string) => {
+                        const statusMessages: Record<string, string> = {
+                            'uploaded': 'Arquivo enviado',
+                            'extracting': 'Extraindo texto',
+                            'chunking': 'Dividindo em chunks',
+                            'embedding': 'Gerando embeddings',
+                            'indexing': 'Indexando no RAG',
+                            'completed': 'Processamento completo',
+                            'error': 'Erro no processamento'
+                        };
+
+                        setUploadProgress({
+                            current: Math.round(progress),
+                            total: 100,
+                            message: statusMessage || statusMessages[status] || 'Processando...',
+                            fileName: `(${i + 1}/${files.length}) ${file.name}`
+                        });
+                    };
+
+                    const uploadedDoc = await apiService.uploadDocument(file, department, onProgress);
 
                     // Buscar display_name do department
                     const storeMap = new Map(ragStores.map(s => [s.name, s.display_name]));
