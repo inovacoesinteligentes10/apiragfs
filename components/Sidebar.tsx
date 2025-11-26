@@ -10,9 +10,10 @@ interface SidebarProps {
     currentView: 'dashboard' | 'documents' | 'chat' | 'analytics' | 'status' | 'settings' | 'stores';
     onNavigate: (view: 'dashboard' | 'documents' | 'chat' | 'analytics' | 'status' | 'settings' | 'stores') => void;
     hasActiveSession: boolean;
+    onOpenAuth?: () => void;
 }
 
-const Sidebar: React.FC<SidebarProps> = ({ currentView, onNavigate, hasActiveSession }) => {
+const Sidebar: React.FC<SidebarProps> = ({ currentView, onNavigate, hasActiveSession, onOpenAuth }) => {
     const menuSections = [
         {
             title: 'Principal',
@@ -172,7 +173,7 @@ const Sidebar: React.FC<SidebarProps> = ({ currentView, onNavigate, hasActiveSes
             {/* Footer */}
             <div className="p-4 border-t border-slate-700 space-y-3">
                 {/* User Menu */}
-                <UserMenu />
+                <UserMenu onOpenAuth={onOpenAuth} />
 
                 {/* App Info */}
                 <div className="text-xs text-slate-400 space-y-1 pt-3 border-t border-slate-700">

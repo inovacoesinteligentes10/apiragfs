@@ -1017,6 +1017,7 @@ const AppContent: React.FC = () => {
                     currentView={currentView}
                     onNavigate={setCurrentView}
                     hasActiveSession={status === AppStatus.Chatting || hasDocumentsForChat}
+                    onOpenAuth={() => setShowAuthModal(true)}
                 />
                 {renderMainContent()}
             </main>
