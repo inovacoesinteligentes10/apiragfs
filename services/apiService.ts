@@ -90,6 +90,45 @@ export interface RagStoreCreate {
     color?: string;
 }
 
+export interface AnalyticsDashboard {
+    total_documents: number;
+    completed_documents: number;
+    total_chat_sessions: number;
+    total_messages: number;
+    documents_by_type: Array<{ type: string; count: number }>;
+    activity_last_7_days: Array<{ date: string; count: number }>;
+    timestamp: string;
+}
+
+export interface AnalyticsStats {
+    total_storage_bytes: number;
+    total_storage_mb: number;
+    avg_processing_time_seconds: number;
+    total_chunks: number;
+    active_chat_sessions: number;
+}
+
+export interface AnalyticsActivity {
+    period_days: number;
+    start_date: string;
+    end_date: string;
+    activity: {
+        [date: string]: Array<{
+            event_type: string;
+            count: number;
+        }>;
+    };
+}
+
+export interface TopQuery {
+    query: string;
+    frequency: number;
+}
+
+export interface TopQueriesResponse {
+    top_queries: TopQuery[];
+}
+
 class ApiService {
     private baseUrl: string;
 
@@ -509,6 +548,81 @@ class ApiService {
         if (!response.ok) {
             const error = await response.json();
             throw new Error(error.detail || 'Erro ao mover documento');
+        }
+
+        return response.json();
+    }
+
+    /**
+     * Analytics - Dashboard metrics
+     */
+    async getAnalyticsDashboard(userId: string): Promise<AnalyticsDashboard> {
+        const response = await fetch(`${this.baseUrl}/api/v1/analytics/dashboard?user_id=${userId}`);
+
+        if (!response.ok) {
+            throw new Error('Erro ao buscar métricas do dashboard');
+        }
+
+        return response.json();
+    }
+
+    /**
+     * Analytics - General stats
+     */
+    async getAnalyticsStats(userId: string): Promise<AnalyticsStats> {
+        const response = await fetch(`${this.baseUrl}/api/v1/analytics/stats?user_id=${userId}`);
+
+        if (!response.ok) {
+            throw new Error('Erro ao buscar estatísticas');
+        }
+
+        return response.json();
+    }
+
+    /**
+     * Analytics - Activity over time
+     */
+    async getAnalyticsActivity(days: number, userId: string): Promise<AnalyticsActivity> {
+        const response = await fetch(`${this.baseUrl}/api/v1/analytics/activity?days=${days}&user_id=${userId}`);
+
+        if (!response.ok) {
+            throw new Error('Erro ao buscar atividade');
+        }
+
+        return response.json();
+    }
+
+    /**
+     * Analytics - Top queries
+     */
+    async getTopQueries(limit: number, userId: string): Promise<TopQueriesResponse> {
+        const response = await fetch(`${this.baseUrl}/api/v1/analytics/queries?limit=${limit}&user_id=${userId}`);
+
+        if (!response.ok) {
+            throw new Error('Erro ao buscar top queries');
+        }
+
+        return response.json();
+    }
+
+    /**
+     * Analytics - Track event
+     */
+    async trackEvent(eventType: string, eventData: any, userId: string): Promise<{ success: boolean; message: string }> {
+        const response = await fetch(`${this.baseUrl}/api/v1/analytics/track`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                event_type: eventType,
+                event_data: eventData,
+                user_id: userId,
+            }),
+        });
+
+        if (!response.ok) {
+            throw new Error('Erro ao registrar evento');
         }
 
         return response.json();
