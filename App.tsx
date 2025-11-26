@@ -9,6 +9,7 @@ import { AppStatus, ChatMessage, ProcessedDocument } from './types';
 import * as geminiService from './services/geminiService';
 import { apiService, RagStore } from './services/apiService';
 import { showSuccess, showError, showInfo, showWarning } from './utils/toast';
+import { AuthProvider, useAuth } from './contexts/AuthContext';
 import Spinner from './components/Spinner';
 import Sidebar from './components/Sidebar';
 import Dashboard from './components/Dashboard';
@@ -21,6 +22,8 @@ import StatusView from './components/StatusView';
 import Settings from './components/Settings';
 import StoreManagement from './components/StoreManagement';
 import DeleteConfirmationModal from './components/DeleteConfirmationModal';
+import AuthModal from './components/AuthModal';
+import UserMenu from './components/UserMenu';
 
 // DO: Define the AIStudio interface to resolve a type conflict where `window.aistudio` was being redeclared with an anonymous type.
 // FIX: Moved the AIStudio interface definition inside the `declare global` block to resolve a TypeScript type conflict.
@@ -34,7 +37,9 @@ declare global {
     }
 }
 
-const App: React.FC = () => {
+const AppContent: React.FC = () => {
+    const { user, loading: authLoading } = useAuth();
+    const [showAuthModal, setShowAuthModal] = useState(false);
     const [currentView, setCurrentView] = useState<'dashboard' | 'documents' | 'chat' | 'analytics' | 'status' | 'settings' | 'stores'>('dashboard');
     const [status, setStatus] = useState<AppStatus>(AppStatus.Welcome);
     const [isApiKeySelected, setIsApiKeySelected] = useState(false);
@@ -1029,7 +1034,23 @@ const App: React.FC = () => {
 
             {/* Toast notifications */}
             <Toaster position="top-right" />
+
+            {/* Auth Modal */}
+            <AuthModal
+                isOpen={showAuthModal}
+                onClose={() => setShowAuthModal(false)}
+                initialMode="login"
+            />
         </>
+    );
+};
+
+// Wrapper principal com AuthProvider
+const App: React.FC = () => {
+    return (
+        <AuthProvider>
+            <AppContent />
+        </AuthProvider>
     );
 };
 
