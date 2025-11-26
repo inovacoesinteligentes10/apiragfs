@@ -242,11 +242,18 @@ class ApiService {
     }
 
     /**
-     * Listar documentos
+     * Listar documentos - Usa autenticação JWT
+     * Admin vê todos os documentos, usuários regulares veem apenas dos stores com permissão
      */
     async listDocuments(skip: number = 0, limit: number = 100): Promise<DocumentUploadResponse[]> {
+        const token = localStorage.getItem('access_token');
         const response = await fetch(
-            `${this.baseUrl}/api/v1/documents/?skip=${skip}&limit=${limit}`
+            `${this.baseUrl}/api/v1/documents/?skip=${skip}&limit=${limit}`,
+            {
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                },
+            }
         );
 
         if (!response.ok) {
@@ -257,10 +264,15 @@ class ApiService {
     }
 
     /**
-     * Buscar documento por ID
+     * Buscar documento por ID - Usa autenticação JWT
      */
     async getDocument(documentId: string): Promise<DocumentUploadResponse> {
-        const response = await fetch(`${this.baseUrl}/api/v1/documents/${documentId}`);
+        const token = localStorage.getItem('access_token');
+        const response = await fetch(`${this.baseUrl}/api/v1/documents/${documentId}`, {
+            headers: {
+                'Authorization': `Bearer ${token}`,
+            },
+        });
 
         if (!response.ok) {
             throw new Error('Documento não encontrado');
@@ -270,11 +282,15 @@ class ApiService {
     }
 
     /**
-     * Deletar documento
+     * Deletar documento - Usa autenticação JWT
      */
     async deleteDocument(documentId: string): Promise<void> {
+        const token = localStorage.getItem('access_token');
         const response = await fetch(`${this.baseUrl}/api/v1/documents/${documentId}`, {
             method: 'DELETE',
+            headers: {
+                'Authorization': `Bearer ${token}`,
+            },
         });
 
         if (!response.ok) {
