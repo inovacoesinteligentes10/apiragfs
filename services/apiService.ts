@@ -414,76 +414,86 @@ class ApiService {
         onDone: (fullText: string, groundingChunks: any[]) => void,
         onError: (error: string) => void
     ): Promise<void> {
-        console.log('🌐 Enviando request de streaming para:', `${this.baseUrl}/api/v1/chat/sessions/${sessionId}/query-stream`);
-
-        const response = await fetch(`${this.baseUrl}/api/v1/chat/sessions/${sessionId}/query-stream`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({ message }),
-        });
-
-        console.log('📡 Response status:', response.status);
-        console.log('📡 Response headers:', Object.fromEntries(response.headers.entries()));
-
-        if (!response.ok) {
-            const error = await response.json();
-            throw new Error(error.detail || 'Erro ao enviar mensagem');
-        }
-
-        const reader = response.body?.getReader();
-        if (!reader) {
-            throw new Error('Stream não disponível');
-        }
-
-        const decoder = new TextDecoder();
-        let buffer = '';
-
         try {
-            while (true) {
-                const { done, value } = await reader.read();
+            console.log('🌐 Enviando request de streaming para:', `${this.baseUrl}/api/v1/chat/sessions/${sessionId}/query-stream`);
 
-                if (done) {
-                    console.log('🏁 Stream finalizado');
-                    break;
-                }
+            const response = await fetch(`${this.baseUrl}/api/v1/chat/sessions/${sessionId}/query-stream`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ message }),
+            });
 
-                buffer += decoder.decode(value, { stream: true });
-                const lines = buffer.split('\n');
+            console.log('📡 Response status:', response.status);
+            console.log('📡 Response headers:', Object.fromEntries(response.headers.entries()));
 
-                // Manter a última linha incompleta no buffer
-                buffer = lines.pop() || '';
+            if (!response.ok) {
+                const error = await response.json();
+                const errorMessage = error.detail || 'Erro ao enviar mensagem';
+                console.error('❌ Erro HTTP:', response.status, errorMessage);
+                onError(errorMessage);
+                return;
+            }
 
-                for (const line of lines) {
-                    if (line.startsWith('data: ')) {
-                        const data = line.slice(6);
-                        console.log('📦 Evento SSE recebido:', data);
-                        try {
-                            const event = JSON.parse(data);
+            const reader = response.body?.getReader();
+            if (!reader) {
+                onError('Stream não disponível');
+                return;
+            }
 
-                            switch (event.type) {
-                                case 'content':
-                                    onContent(event.text);
-                                    break;
-                                case 'grounding':
-                                    onGrounding(event.grounding_chunks);
-                                    break;
-                                case 'done':
-                                    onDone(event.full_text, event.grounding_chunks);
-                                    break;
-                                case 'error':
-                                    onError(event.message);
-                                    break;
+            const decoder = new TextDecoder();
+            let buffer = '';
+
+            try {
+                while (true) {
+                    const { done, value } = await reader.read();
+
+                    if (done) {
+                        console.log('🏁 Stream finalizado');
+                        break;
+                    }
+
+                    buffer += decoder.decode(value, { stream: true });
+                    const lines = buffer.split('\n');
+
+                    // Manter a última linha incompleta no buffer
+                    buffer = lines.pop() || '';
+
+                    for (const line of lines) {
+                        if (line.startsWith('data: ')) {
+                            const data = line.slice(6);
+                            console.log('📦 Evento SSE recebido:', data);
+                            try {
+                                const event = JSON.parse(data);
+
+                                switch (event.type) {
+                                    case 'content':
+                                        onContent(event.text);
+                                        break;
+                                    case 'grounding':
+                                        onGrounding(event.grounding_chunks);
+                                        break;
+                                    case 'done':
+                                        onDone(event.full_text, event.grounding_chunks);
+                                        break;
+                                    case 'error':
+                                        onError(event.message);
+                                        break;
+                                }
+                            } catch (e) {
+                                console.error('❌ Erro ao parsear evento SSE:', e, 'Data:', data);
                             }
-                        } catch (e) {
-                            console.error('❌ Erro ao parsear evento SSE:', e, 'Data:', data);
                         }
                     }
                 }
+            } finally {
+                reader.releaseLock();
             }
-        } finally {
-            reader.releaseLock();
+        } catch (error) {
+            console.error('❌ Erro no streaming:', error);
+            const errorMessage = error instanceof Error ? error.message : String(error);
+            onError(errorMessage);
         }
     }
 
