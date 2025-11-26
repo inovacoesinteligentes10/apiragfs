@@ -3,13 +3,15 @@
  * SPDX-License-Identifier: Apache-2.0
 */
 
-import React from 'react';
+import React, { useMemo } from 'react';
 import { RagStore } from '../services/apiService';
+import { ProcessedDocument } from '../types';
 
 interface DashboardProps {
     onNavigateToDocuments: () => void;
     hasDocuments: boolean;
     stores?: RagStore[];
+    documents?: ProcessedDocument[];
     onNavigateToStores?: () => void;
     onNavigateToChat?: () => void;
     onSelectStore?: (store: RagStore) => void;
@@ -19,16 +21,67 @@ const Dashboard: React.FC<DashboardProps> = ({
     onNavigateToDocuments,
     hasDocuments,
     stores = [],
+    documents = [],
     onNavigateToStores,
     onNavigateToChat,
     onSelectStore
 }) => {
+    // Calcular estatísticas
+    const stats = useMemo(() => {
+        const totalDocs = documents.length;
+        const completedDocs = documents.filter(d => d.status === 'completed').length;
+        const processingDocs = documents.filter(d => d.status !== 'completed' && d.status !== 'error').length;
+        const errorDocs = documents.filter(d => d.status === 'error').length;
+        const totalChunks = documents.reduce((sum, d) => sum + (d.chunks || 0), 0);
+        const totalSize = documents.reduce((sum, d) => sum + d.size, 0);
+        const activeStores = stores.filter(s => s.document_count > 0).length;
+
+        // Documentos de hoje
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        const docsToday = documents.filter(d => {
+            const uploadDate = new Date(d.uploadDate);
+            uploadDate.setHours(0, 0, 0, 0);
+            return uploadDate.getTime() === today.getTime();
+        }).length;
+
+        return {
+            totalDocs,
+            completedDocs,
+            processingDocs,
+            errorDocs,
+            totalChunks,
+            totalSize,
+            activeStores,
+            docsToday
+        };
+    }, [documents, stores]);
+
+    // Distribuição de documentos por store
+    const storeDistribution = useMemo(() => {
+        const distribution: Record<string, number> = {};
+        documents.forEach(doc => {
+            if (doc.department) {
+                distribution[doc.department] = (distribution[doc.department] || 0) + 1;
+            }
+        });
+        return distribution;
+    }, [documents]);
+
+    // Atividades recentes (últimos 5 documentos)
+    const recentActivities = useMemo(() => {
+        return [...documents]
+            .sort((a, b) => new Date(b.uploadDate).getTime() - new Date(a.uploadDate).getTime())
+            .slice(0, 5);
+    }, [documents]);
+
     const handleStoreClick = (store: RagStore) => {
         if (store.document_count > 0 && onSelectStore && onNavigateToChat) {
             onSelectStore(store);
             onNavigateToChat();
         }
     };
+
     const getColorClass = (color: string | null) => {
         switch (color) {
             case 'blue': return 'from-blue-500 to-blue-600';
@@ -63,6 +116,44 @@ const Dashboard: React.FC<DashboardProps> = ({
             </svg>
         );
     };
+
+    const formatBytes = (bytes: number) => {
+        if (bytes === 0) return '0 B';
+        const k = 1024;
+        const sizes = ['B', 'KB', 'MB', 'GB'];
+        const i = Math.floor(Math.log(bytes) / Math.log(k));
+        return Math.round(bytes / Math.pow(k, i) * 100) / 100 + ' ' + sizes[i];
+    };
+
+    const getStatusIcon = (status: ProcessedDocument['status']) => {
+        if (status === 'completed') {
+            return (
+                <div className="w-2 h-2 bg-green-500 rounded-full"></div>
+            );
+        } else if (status === 'error') {
+            return (
+                <div className="w-2 h-2 bg-red-500 rounded-full"></div>
+            );
+        } else {
+            return (
+                <div className="w-2 h-2 bg-yellow-500 rounded-full animate-pulse"></div>
+            );
+        }
+    };
+
+    const getStatusLabel = (status: ProcessedDocument['status']) => {
+        const labels: Record<string, string> = {
+            'uploaded': 'Enviado',
+            'extracting': 'Extraindo',
+            'chunking': 'Fragmentando',
+            'embedding': 'Vetorizando',
+            'indexing': 'Indexando',
+            'completed': 'Completo',
+            'error': 'Erro'
+        };
+        return labels[status] || status;
+    };
+
     return (
         <div className="flex-1 overflow-auto bg-gradient-to-br from-slate-50 to-slate-100 p-8">
             {/* Header */}
@@ -75,14 +166,18 @@ const Dashboard: React.FC<DashboardProps> = ({
                 </p>
             </div>
 
-            {/* Stats Cards */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+            {/* Main Stats Cards */}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+                {/* Total Documentos */}
                 <div className="bg-white rounded-xl shadow-lg p-6 border-l-4 border-blue-500">
                     <div className="flex items-center justify-between">
                         <div>
-                            <p className="text-sm text-slate-600 font-medium">Documentos</p>
+                            <p className="text-sm text-slate-600 font-medium">Total de Documentos</p>
                             <p className="text-3xl font-bold text-slate-800 mt-2">
-                                {hasDocuments ? '1' : '0'}
+                                {stats.totalDocs}
+                            </p>
+                            <p className="text-xs text-slate-500 mt-1">
+                                {stats.completedDocs} completos
                             </p>
                         </div>
                         <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center">
@@ -93,42 +188,205 @@ const Dashboard: React.FC<DashboardProps> = ({
                     </div>
                 </div>
 
+                {/* Stores Ativos */}
                 <div className="bg-white rounded-xl shadow-lg p-6 border-l-4 border-purple-500">
                     <div className="flex items-center justify-between">
                         <div>
-                            <p className="text-sm text-slate-600 font-medium">Status</p>
-                            <p className="text-lg font-bold text-slate-800 mt-2">
-                                {hasDocuments ? 'Ativo' : 'Aguardando'}
+                            <p className="text-sm text-slate-600 font-medium">Stores Ativos</p>
+                            <p className="text-3xl font-bold text-slate-800 mt-2">
+                                {stats.activeStores}
+                            </p>
+                            <p className="text-xs text-slate-500 mt-1">
+                                de {stores.length} total
                             </p>
                         </div>
                         <div className="w-12 h-12 bg-purple-100 rounded-lg flex items-center justify-center">
                             <svg className="w-6 h-6 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
                             </svg>
                         </div>
                     </div>
                 </div>
 
+                {/* Total Chunks */}
                 <div className="bg-white rounded-xl shadow-lg p-6 border-l-4 border-green-500">
                     <div className="flex items-center justify-between">
                         <div>
-                            <p className="text-sm text-slate-600 font-medium">IA</p>
-                            <p className="text-lg font-bold text-slate-800 mt-2">
-                                Gemini 2.5
+                            <p className="text-sm text-slate-600 font-medium">Total de Chunks</p>
+                            <p className="text-3xl font-bold text-slate-800 mt-2">
+                                {stats.totalChunks.toLocaleString()}
+                            </p>
+                            <p className="text-xs text-slate-500 mt-1">
+                                {formatBytes(stats.totalSize)}
                             </p>
                         </div>
                         <div className="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center">
                             <svg className="w-6 h-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 7h16M4 7v13a2 2 0 002 2h12a2 2 0 002-2V7M4 7L6 4h12l2 3m-6 4v6m-4-6v6" />
+                            </svg>
+                        </div>
+                    </div>
+                </div>
+
+                {/* Hoje */}
+                <div className="bg-white rounded-xl shadow-lg p-6 border-l-4 border-orange-500">
+                    <div className="flex items-center justify-between">
+                        <div>
+                            <p className="text-sm text-slate-600 font-medium">Hoje</p>
+                            <p className="text-3xl font-bold text-slate-800 mt-2">
+                                {stats.docsToday}
+                            </p>
+                            <p className="text-xs text-slate-500 mt-1">
+                                documentos novos
+                            </p>
+                        </div>
+                        <div className="w-12 h-12 bg-orange-100 rounded-lg flex items-center justify-center">
+                            <svg className="w-6 h-6 text-orange-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
                             </svg>
                         </div>
                     </div>
                 </div>
             </div>
 
+            {/* Quick Stats e Status */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+                {/* Status de Processamento */}
+                <div className="bg-white rounded-xl shadow-lg p-6">
+                    <h3 className="text-lg font-bold text-slate-800 mb-4">Status de Processamento</h3>
+                    <div className="space-y-3">
+                        <div className="flex items-center justify-between p-3 bg-green-50 rounded-lg">
+                            <div className="flex items-center space-x-3">
+                                <div className="w-2 h-2 bg-green-500 rounded-full"></div>
+                                <span className="text-sm font-medium text-slate-700">Completos</span>
+                            </div>
+                            <span className="text-lg font-bold text-green-600">{stats.completedDocs}</span>
+                        </div>
+                        {stats.processingDocs > 0 && (
+                            <div className="flex items-center justify-between p-3 bg-yellow-50 rounded-lg">
+                                <div className="flex items-center space-x-3">
+                                    <div className="w-2 h-2 bg-yellow-500 rounded-full animate-pulse"></div>
+                                    <span className="text-sm font-medium text-slate-700">Processando</span>
+                                </div>
+                                <span className="text-lg font-bold text-yellow-600">{stats.processingDocs}</span>
+                            </div>
+                        )}
+                        {stats.errorDocs > 0 && (
+                            <div className="flex items-center justify-between p-3 bg-red-50 rounded-lg">
+                                <div className="flex items-center space-x-3">
+                                    <div className="w-2 h-2 bg-red-500 rounded-full"></div>
+                                    <span className="text-sm font-medium text-slate-700">Com Erro</span>
+                                </div>
+                                <span className="text-lg font-bold text-red-600">{stats.errorDocs}</span>
+                            </div>
+                        )}
+                    </div>
+                </div>
+
+                {/* Health Status dos Stores */}
+                <div className="bg-white rounded-xl shadow-lg p-6">
+                    <h3 className="text-lg font-bold text-slate-800 mb-4">Saúde dos RAG Stores</h3>
+                    <div className="space-y-3">
+                        {stores.filter(s => s.document_count > 0).slice(0, 3).map(store => (
+                            <div key={store.id} className="flex items-center justify-between p-3 bg-slate-50 rounded-lg">
+                                <div className="flex items-center space-x-3">
+                                    <div className={`p-2 rounded-lg bg-gradient-to-br ${getColorClass(store.color)} text-white`}>
+                                        {renderIcon(store.icon)}
+                                    </div>
+                                    <div>
+                                        <p className="text-sm font-medium text-slate-700">{store.display_name}</p>
+                                        <p className="text-xs text-slate-500">{store.document_count} docs</p>
+                                    </div>
+                                </div>
+                                {store.rag_store_name ? (
+                                    <span className="flex items-center space-x-1 text-xs text-green-600">
+                                        <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                                            <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                                        </svg>
+                                        <span>Ativo</span>
+                                    </span>
+                                ) : (
+                                    <span className="text-xs text-slate-400">Inativo</span>
+                                )}
+                            </div>
+                        ))}
+                        {stores.filter(s => s.document_count > 0).length === 0 && (
+                            <p className="text-sm text-slate-500 text-center py-4">Nenhum store ativo</p>
+                        )}
+                    </div>
+                </div>
+            </div>
+
+            {/* Gráfico de Distribuição e Atividades Recentes */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+                {/* Distribuição por Store */}
+                <div className="bg-white rounded-xl shadow-lg p-6">
+                    <h3 className="text-lg font-bold text-slate-800 mb-4">Distribuição por Store</h3>
+                    {Object.keys(storeDistribution).length > 0 ? (
+                        <div className="space-y-3">
+                            {Object.entries(storeDistribution)
+                                .sort(([, a], [, b]) => b - a)
+                                .map(([storeName, count]) => {
+                                    const store = stores.find(s => s.name === storeName);
+                                    const percentage = (count / stats.totalDocs) * 100;
+                                    return (
+                                        <div key={storeName}>
+                                            <div className="flex items-center justify-between mb-1">
+                                                <span className="text-sm font-medium text-slate-700">
+                                                    {store?.display_name || storeName}
+                                                </span>
+                                                <span className="text-sm text-slate-600">{count} ({percentage.toFixed(0)}%)</span>
+                                            </div>
+                                            <div className="w-full bg-slate-200 rounded-full h-2">
+                                                <div
+                                                    className={`h-2 rounded-full bg-gradient-to-r ${getColorClass(store?.color || null)}`}
+                                                    style={{ width: `${percentage}%` }}
+                                                ></div>
+                                            </div>
+                                        </div>
+                                    );
+                                })}
+                        </div>
+                    ) : (
+                        <p className="text-sm text-slate-500 text-center py-8">Nenhum documento ainda</p>
+                    )}
+                </div>
+
+                {/* Atividades Recentes */}
+                <div className="bg-white rounded-xl shadow-lg p-6">
+                    <h3 className="text-lg font-bold text-slate-800 mb-4">Atividades Recentes</h3>
+                    {recentActivities.length > 0 ? (
+                        <div className="space-y-3">
+                            {recentActivities.map((doc) => (
+                                <div key={doc.id} className="flex items-start space-x-3 p-3 bg-slate-50 rounded-lg">
+                                    {getStatusIcon(doc.status)}
+                                    <div className="flex-1 min-w-0">
+                                        <p className="text-sm font-medium text-slate-800 truncate">{doc.name}</p>
+                                        <div className="flex items-center space-x-2 mt-1">
+                                            <span className="text-xs text-slate-500">{getStatusLabel(doc.status)}</span>
+                                            <span className="text-xs text-slate-400">•</span>
+                                            <span className="text-xs text-slate-500">
+                                                {new Date(doc.uploadDate).toLocaleDateString('pt-BR', {
+                                                    day: '2-digit',
+                                                    month: 'short',
+                                                    hour: '2-digit',
+                                                    minute: '2-digit'
+                                                })}
+                                            </span>
+                                        </div>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    ) : (
+                        <p className="text-sm text-slate-500 text-center py-8">Nenhuma atividade ainda</p>
+                    )}
+                </div>
+            </div>
+
             {/* Quick Actions */}
             <div className="bg-white rounded-xl shadow-lg p-8 mb-8">
-                <h2 className="text-2xl font-bold text-slate-800 mb-6">Começar</h2>
+                <h2 className="text-2xl font-bold text-slate-800 mb-6">Ações Rápidas</h2>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <button
                         onClick={onNavigateToDocuments}
@@ -147,24 +405,22 @@ const Dashboard: React.FC<DashboardProps> = ({
                         </div>
                     </button>
 
-                    <div className="group p-6 rounded-xl border-2 border-dashed border-slate-300 opacity-50 cursor-not-allowed">
+                    <button
+                        onClick={() => onNavigateToStores && onNavigateToStores()}
+                        className="group p-6 rounded-xl border-2 border-dashed border-slate-300 hover:border-purple-500 hover:bg-purple-50 transition-all duration-200"
+                    >
                         <div className="flex items-center space-x-4">
-                            <div className="w-12 h-12 bg-slate-100 rounded-lg flex items-center justify-center">
-                                <svg className="w-6 h-6 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
+                            <div className="w-12 h-12 bg-purple-100 rounded-lg flex items-center justify-center group-hover:bg-purple-200 transition-colors">
+                                <svg className="w-6 h-6 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
                                 </svg>
                             </div>
                             <div className="text-left">
-                                <h3 className="font-semibold text-slate-600 text-lg flex items-center">
-                                    Conversar com IA
-                                    <svg className="w-4 h-4 ml-2" fill="currentColor" viewBox="0 0 20 20">
-                                        <path fillRule="evenodd" d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 016 0z" clipRule="evenodd" />
-                                    </svg>
-                                </h3>
-                                <p className="text-sm text-slate-500 mt-1">Disponível após upload de documentos</p>
+                                <h3 className="font-semibold text-slate-800 text-lg">Gerenciar Stores</h3>
+                                <p className="text-sm text-slate-600 mt-1">Organize seus documentos por departamentos</p>
                             </div>
                         </div>
-                    </div>
+                    </button>
                 </div>
             </div>
 
@@ -176,17 +432,6 @@ const Dashboard: React.FC<DashboardProps> = ({
                             <h2 className="text-2xl font-bold text-slate-800">Seus Stores</h2>
                             <p className="text-slate-600 mt-1">Documentos organizados por departamentos/contextos</p>
                         </div>
-                        {onNavigateToStores && (
-                            <button
-                                onClick={onNavigateToStores}
-                                className="flex items-center space-x-2 px-4 py-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
-                            >
-                                <span>Gerenciar</span>
-                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                                </svg>
-                            </button>
-                        )}
                     </div>
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                         {stores.map((store) => (
