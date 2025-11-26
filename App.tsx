@@ -860,6 +860,7 @@ const App: React.FC = () => {
                     onNavigateToDocuments={() => setCurrentView('documents')}
                     hasDocuments={!!activeRagStoreName}
                     stores={ragStores}
+                    documents={processedDocuments}
                     onNavigateToStores={() => setCurrentView('stores')}
                     onNavigateToChat={() => setCurrentView('chat')}
                     onSelectStore={handleSelectStore}
