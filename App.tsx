@@ -4,9 +4,11 @@
 */
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { Toaster } from 'react-hot-toast';
 import { AppStatus, ChatMessage, ProcessedDocument } from './types';
 import * as geminiService from './services/geminiService';
 import { apiService, RagStore } from './services/apiService';
+import { showSuccess, showError, showInfo, showWarning } from './utils/toast';
 import Spinner from './components/Spinner';
 import Sidebar from './components/Sidebar';
 import Dashboard from './components/Dashboard';
@@ -362,6 +364,7 @@ const App: React.FC = () => {
                     };
 
                     setProcessedDocuments(prev => [...prev, doc]);
+                    showSuccess(`Documento ${file.name} processado com sucesso!`);
 
                 } catch (err) {
                     const doc: ProcessedDocument = {
@@ -381,11 +384,13 @@ const App: React.FC = () => {
                     };
 
                     setProcessedDocuments(prev => [...prev, doc]);
+                    showError(`Erro ao processar ${file.name}: ${err instanceof Error ? err.message : 'Erro desconhecido'}`);
                     handleError("Falha ao fazer upload", err);
                 }
             }
 
             setUploadProgress({ current: totalSteps, total: totalSteps, message: "Upload concluído!", fileName: "" });
+            showInfo(`${files.length} documento(s) processado(s) com sucesso!`);
             await new Promise(resolve => setTimeout(resolve, 1000));
 
             // Recarregar stores para atualizar contagem de documentos
@@ -437,6 +442,8 @@ const App: React.FC = () => {
             await apiService.deleteDocument(deleteModal.documentId);
             setProcessedDocuments(prev => prev.filter(doc => doc.id !== deleteModal.documentId));
 
+            showSuccess(`Documento "${deleteModal.documentName}" excluído com sucesso!`);
+
             // Recarregar stores para atualizar contagem
             try {
                 const updatedStores = await apiService.listRagStores();
@@ -461,8 +468,8 @@ const App: React.FC = () => {
             });
         } catch (err) {
             console.error('Erro ao deletar documento:', err);
+            showError(`Erro ao excluir documento: ${err instanceof Error ? err.message : 'Erro desconhecido'}`);
             setDeleteModal(prev => ({ ...prev, isDeleting: false }));
-            alert('Erro ao deletar documento. Por favor, tente novamente.');
         }
     };
 
@@ -1019,6 +1026,9 @@ const App: React.FC = () => {
                 documentName={deleteModal.documentName || undefined}
                 isDeleting={deleteModal.isDeleting}
             />
+
+            {/* Toast notifications */}
+            <Toaster position="top-right" />
         </>
     );
 };
