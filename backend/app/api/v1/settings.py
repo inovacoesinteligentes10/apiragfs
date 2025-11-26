@@ -1,7 +1,7 @@
 """
 Rotas da API para gerenciamento de configurações do usuário
 """
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Depends
 from datetime import datetime
 import uuid
 
@@ -11,15 +11,17 @@ from ...schemas.settings import (
     SettingUpdate, SettingResponse,
     SystemPromptUpdate, SystemPromptResponse
 )
+from ...middleware.auth import get_current_user
 
 router = APIRouter(tags=["Settings"])
 
 
 @router.get("/system-prompt", response_model=SystemPromptResponse)
-async def get_system_prompt(user_id: str = "default-user"):
+async def get_system_prompt(current_user: dict = Depends(get_current_user)):
     """
-    Retorna o system prompt configurado para o usuário
+    Retorna o system prompt configurado para o usuário autenticado
     """
+    user_id = current_user['id']
     # Buscar configuração customizada do banco
     setting = await db.fetch_one(
         """
@@ -46,11 +48,12 @@ async def get_system_prompt(user_id: str = "default-user"):
 @router.put("/system-prompt", response_model=SystemPromptResponse)
 async def update_system_prompt(
     data: SystemPromptUpdate,
-    user_id: str = "default-user"
+    current_user: dict = Depends(get_current_user)
 ):
     """
-    Atualiza o system prompt do usuário
+    Atualiza o system prompt do usuário autenticado
     """
+    user_id = current_user['id']
     try:
         # Verificar se já existe uma configuração
         existing = await db.fetch_one(
@@ -92,10 +95,11 @@ async def update_system_prompt(
 
 
 @router.post("/reset-system-prompt", response_model=SystemPromptResponse)
-async def reset_system_prompt(user_id: str = "default-user"):
+async def reset_system_prompt(current_user: dict = Depends(get_current_user)):
     """
-    Restaura o system prompt para o padrão
+    Restaura o system prompt para o padrão do usuário autenticado
     """
+    user_id = current_user['id']
     try:
         # Deletar configuração customizada
         await db.execute(
@@ -116,10 +120,11 @@ async def reset_system_prompt(user_id: str = "default-user"):
 
 
 @router.get("/", response_model=list[SettingResponse])
-async def list_settings(user_id: str = "default-user"):
+async def list_settings(current_user: dict = Depends(get_current_user)):
     """
-    Lista todas as configurações do usuário
+    Lista todas as configurações do usuário autenticado
     """
+    user_id = current_user['id']
     settings_list = await db.fetch_all(
         """
         SELECT id, user_id, setting_key, setting_value, created_at, updated_at
@@ -136,11 +141,12 @@ async def list_settings(user_id: str = "default-user"):
 @router.put("/", response_model=SettingResponse)
 async def update_setting(
     data: SettingUpdate,
-    user_id: str = "default-user"
+    current_user: dict = Depends(get_current_user)
 ):
     """
-    Atualiza ou cria uma configuração genérica
+    Atualiza ou cria uma configuração genérica do usuário autenticado
     """
+    user_id = current_user['id']
     try:
         # Verificar se já existe
         existing = await db.fetch_one(
