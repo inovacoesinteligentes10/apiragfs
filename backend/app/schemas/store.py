@@ -64,7 +64,7 @@ class StorePermissionResponse(BaseModel):
     created_at: datetime
     created_by: Optional[str] = None
 
-    @field_validator('id', 'user_id', 'store_id', mode='before')
+    @field_validator('id', 'user_id', 'store_id', 'created_by', mode='before')
     @classmethod
     def convert_uuid_to_str(cls, v):
         """Converter UUID para string"""
