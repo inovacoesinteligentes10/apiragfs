@@ -34,14 +34,14 @@ Responda seguindo rigorosamente estas diretrizes. Lembre-se: FIDELIDADE AO DOCUM
 const Settings: React.FC = () => {
     const [settings, setSettings] = useState({
         apiKey: '••••••••••••••••••••',
-        model: 'gemini-2.0-flash-exp',
-        temperature: 0.7,
-        maxTokens: 2048,
+        model: 'gemini-2.5-flash', // Valor real usado no backend (settings.py)
+        temperature: 1.0, // Padrão do Gemini (não customizado no código)
+        maxTokens: 8192, // Padrão do Gemini 2.5 Flash
         language: 'pt-BR',
         theme: 'light',
         notifications: true,
         autoSave: true,
-        contextWindow: 8192,
+        contextWindow: 1000000, // Context window do Gemini 2.5 Flash
         systemPrompt: DEFAULT_SYSTEM_PROMPT
     });
 
@@ -114,51 +114,69 @@ const Settings: React.FC = () => {
 
                 {/* API Configuration */}
                 <div className="bg-white rounded-xl shadow-md border border-slate-200 p-6 mb-6">
-                    <h3 className="text-lg font-bold text-slate-800 mb-4 flex items-center">
-                        <svg className="w-5 h-5 mr-2 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" />
-                        </svg>
-                        Configurações da API
-                    </h3>
+                    <div className="flex items-start justify-between mb-4">
+                        <h3 className="text-lg font-bold text-slate-800 flex items-center">
+                            <svg className="w-5 h-5 mr-2 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" />
+                            </svg>
+                            Configurações da API
+                        </h3>
+                        <span className="px-2 py-1 bg-blue-50 text-blue-700 text-xs font-medium rounded-full">
+                            Somente leitura
+                        </span>
+                    </div>
+                    <div className="mb-3 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                        <p className="text-xs text-blue-700">
+                            ℹ️ Estas configurações são definidas no backend (arquivo .env). Os valores abaixo refletem a configuração atual em uso.
+                        </p>
+                    </div>
                     <div className="space-y-4">
                         <div>
                             <label className="block text-sm font-medium text-slate-700 mb-2">Chave da API Gemini</label>
                             <input
                                 type="password"
                                 value={settings.apiKey}
-                                onChange={(e) => setSettings({ ...settings, apiKey: e.target.value })}
-                                className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                                disabled
+                                className="w-full px-4 py-2 border border-slate-300 rounded-lg bg-slate-50 cursor-not-allowed"
                             />
-                            <p className="text-xs text-slate-500 mt-1">Sua chave de API do Google Gemini</p>
+                            <p className="text-xs text-slate-500 mt-1">Configurada via variável de ambiente GEMINI_API_KEY</p>
                         </div>
                         <div>
-                            <label className="block text-sm font-medium text-slate-700 mb-2">Modelo</label>
-                            <select
+                            <label className="block text-sm font-medium text-slate-700 mb-2">Modelo em Uso</label>
+                            <input
+                                type="text"
                                 value={settings.model}
-                                onChange={(e) => setSettings({ ...settings, model: e.target.value })}
-                                className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                            >
-                                <option value="gemini-2.0-flash-exp">Gemini 2.0 Flash (Experimental)</option>
-                                <option value="gemini-1.5-pro">Gemini 1.5 Pro</option>
-                                <option value="gemini-1.5-flash">Gemini 1.5 Flash</option>
-                            </select>
+                                disabled
+                                className="w-full px-4 py-2 border border-slate-300 rounded-lg bg-slate-50 cursor-not-allowed font-mono text-sm"
+                            />
+                            <p className="text-xs text-slate-500 mt-1">Configurado via variável GEMINI_MODEL no backend</p>
                         </div>
                     </div>
                 </div>
 
                 {/* Model Parameters */}
                 <div className="bg-white rounded-xl shadow-md border border-slate-200 p-6 mb-6">
-                    <h3 className="text-lg font-bold text-slate-800 mb-4 flex items-center">
-                        <svg className="w-5 h-5 mr-2 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4" />
-                        </svg>
-                        Parâmetros do Modelo
-                    </h3>
+                    <div className="flex items-start justify-between mb-4">
+                        <h3 className="text-lg font-bold text-slate-800 flex items-center">
+                            <svg className="w-5 h-5 mr-2 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4" />
+                            </svg>
+                            Parâmetros do Modelo
+                        </h3>
+                        <span className="px-2 py-1 bg-purple-50 text-purple-700 text-xs font-medium rounded-full">
+                            Informativo
+                        </span>
+                    </div>
+                    <div className="mb-3 p-3 bg-purple-50 border border-purple-200 rounded-lg">
+                        <p className="text-xs text-purple-700">
+                            ℹ️ Estes são os parâmetros padrão do modelo {settings.model}. Atualmente não são customizados no código.
+                        </p>
+                    </div>
                     <div className="space-y-4">
                         <div>
                             <div className="flex items-center justify-between mb-2">
                                 <label className="text-sm font-medium text-slate-700">Temperature</label>
-                                <span className="text-sm font-semibold text-blue-600">{settings.temperature}</span>
+                                <span className="text-sm font-semibold text-purple-600">{settings.temperature} (padrão)</span>
                             </div>
                             <input
                                 type="range"
@@ -166,34 +184,30 @@ const Settings: React.FC = () => {
                                 max="2"
                                 step="0.1"
                                 value={settings.temperature}
-                                onChange={(e) => setSettings({ ...settings, temperature: parseFloat(e.target.value) })}
-                                className="w-full"
+                                disabled
+                                className="w-full opacity-50 cursor-not-allowed"
                             />
-                            <p className="text-xs text-slate-500 mt-1">Controla a criatividade das respostas (0 = conservador, 2 = criativo)</p>
+                            <p className="text-xs text-slate-500 mt-1">Padrão do Gemini - não customizado</p>
                         </div>
                         <div>
-                            <label className="block text-sm font-medium text-slate-700 mb-2">Max Tokens</label>
+                            <label className="block text-sm font-medium text-slate-700 mb-2">Max Output Tokens</label>
                             <input
-                                type="number"
-                                value={settings.maxTokens}
-                                onChange={(e) => setSettings({ ...settings, maxTokens: parseInt(e.target.value) })}
-                                className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                                type="text"
+                                value={settings.maxTokens.toLocaleString()}
+                                disabled
+                                className="w-full px-4 py-2 border border-slate-300 rounded-lg bg-slate-50 cursor-not-allowed"
                             />
-                            <p className="text-xs text-slate-500 mt-1">Número máximo de tokens por resposta</p>
+                            <p className="text-xs text-slate-500 mt-1">Limite padrão do modelo Gemini 2.5 Flash</p>
                         </div>
                         <div>
                             <label className="block text-sm font-medium text-slate-700 mb-2">Context Window</label>
-                            <select
-                                value={settings.contextWindow}
-                                onChange={(e) => setSettings({ ...settings, contextWindow: parseInt(e.target.value) })}
-                                className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                            >
-                                <option value="4096">4K tokens</option>
-                                <option value="8192">8K tokens</option>
-                                <option value="16384">16K tokens</option>
-                                <option value="32768">32K tokens</option>
-                            </select>
-                            <p className="text-xs text-slate-500 mt-1">Tamanho da janela de contexto</p>
+                            <input
+                                type="text"
+                                value={`${(settings.contextWindow / 1000).toFixed(0)}K tokens (1M)`}
+                                disabled
+                                className="w-full px-4 py-2 border border-slate-300 rounded-lg bg-slate-50 cursor-not-allowed"
+                            />
+                            <p className="text-xs text-slate-500 mt-1">Janela de contexto do Gemini 2.5 Flash</p>
                         </div>
                     </div>
                 </div>
@@ -243,72 +257,72 @@ const Settings: React.FC = () => {
 
                 {/* General Settings */}
                 <div className="bg-white rounded-xl shadow-md border border-slate-200 p-6 mb-6">
-                    <h3 className="text-lg font-bold text-slate-800 mb-4 flex items-center">
-                        <svg className="w-5 h-5 mr-2 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                        </svg>
-                        Configurações Gerais
-                    </h3>
+                    <div className="flex items-start justify-between mb-4">
+                        <h3 className="text-lg font-bold text-slate-800 flex items-center">
+                            <svg className="w-5 h-5 mr-2 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                            </svg>
+                            Configurações Gerais
+                        </h3>
+                        <span className="px-2 py-1 bg-gray-100 text-gray-600 text-xs font-medium rounded-full">
+                            Planejado
+                        </span>
+                    </div>
+                    <div className="mb-3 p-3 bg-gray-50 border border-gray-200 rounded-lg">
+                        <p className="text-xs text-gray-600">
+                            ℹ️ Estas configurações de interface estão planejadas para implementação futura.
+                        </p>
+                    </div>
                     <div className="space-y-4">
                         <div>
                             <label className="block text-sm font-medium text-slate-700 mb-2">Idioma</label>
                             <select
                                 value={settings.language}
-                                onChange={(e) => setSettings({ ...settings, language: e.target.value })}
-                                className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                                disabled
+                                className="w-full px-4 py-2 border border-slate-300 rounded-lg bg-slate-50 cursor-not-allowed"
                             >
                                 <option value="pt-BR">Português (Brasil)</option>
                                 <option value="en-US">English (US)</option>
                                 <option value="es-ES">Español</option>
                             </select>
+                            <p className="text-xs text-slate-500 mt-1">Funcionalidade planejada</p>
                         </div>
                         <div>
                             <label className="block text-sm font-medium text-slate-700 mb-2">Tema</label>
                             <select
                                 value={settings.theme}
-                                onChange={(e) => setSettings({ ...settings, theme: e.target.value })}
-                                className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                                disabled
+                                className="w-full px-4 py-2 border border-slate-300 rounded-lg bg-slate-50 cursor-not-allowed"
                             >
                                 <option value="light">Claro</option>
                                 <option value="dark">Escuro</option>
                                 <option value="auto">Automático</option>
                             </select>
+                            <p className="text-xs text-slate-500 mt-1">Funcionalidade planejada</p>
                         </div>
-                        <div className="flex items-center justify-between p-4 bg-slate-50 rounded-lg border border-slate-200">
+                        <div className="flex items-center justify-between p-4 bg-slate-50 rounded-lg border border-slate-200 opacity-60">
                             <div>
                                 <h4 className="text-sm font-medium text-slate-700">Notificações</h4>
-                                <p className="text-xs text-slate-500">Receber notificações sobre atualizações</p>
+                                <p className="text-xs text-slate-500">Funcionalidade planejada</p>
                             </div>
                             <button
-                                onClick={() => setSettings({ ...settings, notifications: !settings.notifications })}
-                                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-                                    settings.notifications ? 'bg-blue-600' : 'bg-slate-300'
-                                }`}
+                                disabled
+                                className="relative inline-flex h-6 w-11 items-center rounded-full bg-slate-300 cursor-not-allowed"
                             >
-                                <span
-                                    className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                                        settings.notifications ? 'translate-x-6' : 'translate-x-1'
-                                    }`}
-                                />
+                                <span className="inline-block h-4 w-4 transform rounded-full bg-white translate-x-1" />
                             </button>
                         </div>
-                        <div className="flex items-center justify-between p-4 bg-slate-50 rounded-lg border border-slate-200">
+                        <div className="flex items-center justify-between p-4 bg-slate-50 rounded-lg border border-slate-200 opacity-60">
                             <div>
                                 <h4 className="text-sm font-medium text-slate-700">Auto-save</h4>
-                                <p className="text-xs text-slate-500">Salvar conversas automaticamente</p>
+                                <p className="text-xs text-slate-500">Funcionalidade planejada</p>
                             </div>
                             <button
-                                onClick={() => setSettings({ ...settings, autoSave: !settings.autoSave })}
-                                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-                                    settings.autoSave ? 'bg-blue-600' : 'bg-slate-300'
-                                }`}
+                                disabled
+                                className="relative inline-flex h-6 w-11 items-center rounded-full bg-slate-300 cursor-not-allowed"
                             >
-                                <span
-                                    className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                                        settings.autoSave ? 'translate-x-6' : 'translate-x-1'
-                                    }`}
-                                />
+                                <span className="inline-block h-4 w-4 transform rounded-full bg-white translate-x-1" />
                             </button>
                         </div>
                     </div>
