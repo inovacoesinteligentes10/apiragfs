@@ -21,6 +21,8 @@ import Analytics from './components/Analytics';
 import StatusView from './components/StatusView';
 import Settings from './components/Settings';
 import StoreManagement from './components/StoreManagement';
+import UsersManagement from './components/UsersManagement';
+import ChatsView from './components/ChatsView';
 import DeleteConfirmationModal from './components/DeleteConfirmationModal';
 import AuthModal from './components/AuthModal';
 import UserMenu from './components/UserMenu';
@@ -40,7 +42,7 @@ declare global {
 const AppContent: React.FC = () => {
     const { user, loading: authLoading } = useAuth();
     const [showAuthModal, setShowAuthModal] = useState(false);
-    const [currentView, setCurrentView] = useState<'dashboard' | 'documents' | 'chat' | 'analytics' | 'status' | 'settings' | 'stores'>('dashboard');
+    const [currentView, setCurrentView] = useState<'dashboard' | 'documents' | 'chat' | 'analytics' | 'status' | 'settings' | 'stores' | 'users' | 'chats'>('dashboard');
     const [status, setStatus] = useState<AppStatus>(AppStatus.Welcome);
     const [isApiKeySelected, setIsApiKeySelected] = useState(false);
     const [apiKeyError, setApiKeyError] = useState<string | null>(null);
@@ -982,6 +984,10 @@ const AppContent: React.FC = () => {
                 return <Settings />;
             case 'stores':
                 return <StoreManagement />;
+            case 'users':
+                return <UsersManagement />;
+            case 'chats':
+                return <ChatsView />;
             default:
                 return <Dashboard
                     onNavigateToDocuments={() => setCurrentView('documents')}
@@ -1018,6 +1024,10 @@ const AppContent: React.FC = () => {
                     onNavigate={setCurrentView}
                     hasActiveSession={status === AppStatus.Chatting || hasDocumentsForChat}
                     onOpenAuth={() => setShowAuthModal(true)}
+                    onNewChat={() => {
+                        // TODO: Implement new chat logic
+                        setCurrentView('chat');
+                    }}
                 />
                 {renderMainContent()}
             </main>

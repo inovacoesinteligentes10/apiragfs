@@ -14,8 +14,8 @@ class Settings(BaseSettings):
     debug: bool = False
     api_v1_prefix: str = "/api/v1"
 
-    # CORS
-    cors_origins: list[str] = ["http://localhost:3001", "http://localhost:3000"]
+    # CORS - Porta 3001 é a padrão do projeto
+    cors_origins: list[str] = ["http://localhost:3001"]
 
     # Database PostgreSQL
     database_url: str = "postgresql://postgres:postgres@postgres:5432/apiragfs"

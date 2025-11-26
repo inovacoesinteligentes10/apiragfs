@@ -163,3 +163,7 @@ class OptionalAuth:
 
 # Instância para uso opcional
 optional_auth = OptionalAuth()
+
+
+# Alias para facilitar uso
+require_admin = get_current_admin_user
