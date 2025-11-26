@@ -505,10 +505,15 @@ class ApiService {
     }
 
     /**
-     * Buscar system prompt atual
+     * Buscar system prompt atual - Usa autenticação JWT
      */
-    async getSystemPrompt(userId: string = 'default-user'): Promise<SystemPromptResponse> {
-        const response = await fetch(`${this.baseUrl}/api/v1/settings/system-prompt?user_id=${userId}`);
+    async getSystemPrompt(): Promise<SystemPromptResponse> {
+        const token = localStorage.getItem('access_token');
+        const response = await fetch(`${this.baseUrl}/api/v1/settings/system-prompt`, {
+            headers: {
+                'Authorization': `Bearer ${token}`,
+            },
+        });
 
         if (!response.ok) {
             throw new Error('Erro ao buscar system prompt');
@@ -518,13 +523,15 @@ class ApiService {
     }
 
     /**
-     * Atualizar system prompt
+     * Atualizar system prompt - Usa autenticação JWT
      */
-    async updateSystemPrompt(systemPrompt: string, userId: string = 'default-user'): Promise<SystemPromptResponse> {
-        const response = await fetch(`${this.baseUrl}/api/v1/settings/system-prompt?user_id=${userId}`, {
+    async updateSystemPrompt(systemPrompt: string): Promise<SystemPromptResponse> {
+        const token = localStorage.getItem('access_token');
+        const response = await fetch(`${this.baseUrl}/api/v1/settings/system-prompt`, {
             method: 'PUT',
             headers: {
                 'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`,
             },
             body: JSON.stringify({ system_prompt: systemPrompt }),
         });
@@ -538,11 +545,15 @@ class ApiService {
     }
 
     /**
-     * Resetar system prompt para o padrão
+     * Resetar system prompt para o padrão - Usa autenticação JWT
      */
-    async resetSystemPrompt(userId: string = 'default-user'): Promise<SystemPromptResponse> {
-        const response = await fetch(`${this.baseUrl}/api/v1/settings/reset-system-prompt?user_id=${userId}`, {
+    async resetSystemPrompt(): Promise<SystemPromptResponse> {
+        const token = localStorage.getItem('access_token');
+        const response = await fetch(`${this.baseUrl}/api/v1/settings/reset-system-prompt`, {
             method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${token}`,
+            },
         });
 
         if (!response.ok) {
