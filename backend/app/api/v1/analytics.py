@@ -2,71 +2,85 @@
 Rotas da API para Analytics e métricas
 """
 from typing import List, Dict, Any
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Depends
 from datetime import datetime, timedelta
 import json
 
 from ...config.database import db
 from ...config.redis import redis_client
+from ...middleware.auth import get_current_user
 
 router = APIRouter(tags=["Analytics"])
 
 
 @router.get("/dashboard")
-async def get_dashboard_metrics(user_id: str = "default-user"):
+async def get_dashboard_metrics(current_user: dict = Depends(get_current_user)):
     """
-    Retorna métricas do dashboard principal
+    Retorna métricas do dashboard principal.
+    Admin vê métricas globais, usuários regulares veem apenas suas métricas.
     """
+    user_id = current_user['id']
+    role = current_user['role']
+
     try:
         # Verificar cache
-        cache_key = f"analytics:dashboard:{user_id}"
+        cache_key = f"analytics:dashboard:{user_id}:{role}"
         cached = await redis_client.get(cache_key)
         if cached:
             return json.loads(cached)
 
-        # Total de documentos
-        total_docs_result = await db.fetch_one(
-            "SELECT COUNT(*) as count FROM documents WHERE user_id = $1",
-            user_id
-        )
+        # Queries baseadas no role
+        if role == 'admin':
+            # Admin vê estatísticas globais
+            total_docs_result = await db.fetch_one("SELECT COUNT(*) as count FROM documents")
+            completed_docs_result = await db.fetch_one("SELECT COUNT(*) as count FROM documents WHERE status = 'completed'")
+            total_sessions_result = await db.fetch_one("SELECT COUNT(*) as count FROM chat_sessions")
+            total_messages_result = await db.fetch_one("SELECT COUNT(*) as count FROM messages")
+            docs_by_type = await db.fetch_all(
+                """
+                SELECT type, COUNT(*) as count
+                FROM documents
+                GROUP BY type
+                ORDER BY count DESC
+                """
+            )
+        else:
+            # Usuário regular vê apenas seus dados
+            total_docs_result = await db.fetch_one(
+                "SELECT COUNT(*) as count FROM documents WHERE user_id = $1",
+                user_id
+            )
+            completed_docs_result = await db.fetch_one(
+                "SELECT COUNT(*) as count FROM documents WHERE user_id = $1 AND status = 'completed'",
+                user_id
+            )
+            total_sessions_result = await db.fetch_one(
+                "SELECT COUNT(*) as count FROM chat_sessions WHERE user_id = $1",
+                user_id
+            )
+            total_messages_result = await db.fetch_one(
+                """
+                SELECT COUNT(*) as count FROM messages m
+                JOIN chat_sessions cs ON m.session_id = cs.id
+                WHERE cs.user_id = $1
+                """,
+                user_id
+            )
+            docs_by_type = await db.fetch_all(
+                """
+                SELECT type, COUNT(*) as count
+                FROM documents
+                WHERE user_id = $1
+                GROUP BY type
+                ORDER BY count DESC
+                """,
+                user_id
+            )
+
         total_documents = total_docs_result['count'] if total_docs_result else 0
-
-        # Documentos completados
-        completed_docs_result = await db.fetch_one(
-            "SELECT COUNT(*) as count FROM documents WHERE user_id = $1 AND status = 'completed'",
-            user_id
-        )
         completed_documents = completed_docs_result['count'] if completed_docs_result else 0
-
-        # Total de sessões de chat
-        total_sessions_result = await db.fetch_one(
-            "SELECT COUNT(*) as count FROM chat_sessions WHERE user_id = $1",
-            user_id
-        )
         total_sessions = total_sessions_result['count'] if total_sessions_result else 0
-
-        # Total de mensagens
-        total_messages_result = await db.fetch_one(
-            """
-            SELECT COUNT(*) as count FROM messages m
-            JOIN chat_sessions cs ON m.session_id = cs.id
-            WHERE cs.user_id = $1
-            """,
-            user_id
-        )
         total_messages = total_messages_result['count'] if total_messages_result else 0
-
-        # Documentos por tipo
-        docs_by_type = await db.fetch_all(
-            """
-            SELECT type, COUNT(*) as count
-            FROM documents
-            WHERE user_id = $1
-            GROUP BY type
-            ORDER BY count DESC
-            """,
-            user_id
-        )
 
         # Atividade dos últimos 7 dias
         seven_days_ago = datetime.now() - timedelta(days=7)
@@ -219,41 +233,49 @@ async def track_event(
 
 
 @router.get("/stats")
-async def get_general_stats(user_id: str = "default-user"):
+async def get_general_stats(current_user: dict = Depends(get_current_user)):
     """
-    Retorna estatísticas gerais do sistema
+    Retorna estatísticas gerais do sistema.
+    Admin vê estatísticas globais, usuários regulares veem apenas suas estatísticas.
     """
+    user_id = current_user['id']
+    role = current_user['role']
+
     try:
-        # Tamanho total dos documentos
-        total_size_result = await db.fetch_one(
-            "SELECT COALESCE(SUM(size), 0) as total FROM documents WHERE user_id = $1",
-            user_id
-        )
+        if role == 'admin':
+            # Admin vê estatísticas globais
+            total_size_result = await db.fetch_one("SELECT COALESCE(SUM(size), 0) as total FROM documents")
+            avg_processing_result = await db.fetch_one(
+                "SELECT AVG(processing_time) as avg_time FROM documents WHERE processing_time IS NOT NULL"
+            )
+            total_chunks_result = await db.fetch_one("SELECT COALESCE(SUM(chunks), 0) as total FROM documents")
+            active_sessions_result = await db.fetch_one("SELECT COUNT(*) as count FROM chat_sessions WHERE ended_at IS NULL")
+        else:
+            # Usuário regular vê apenas suas estatísticas
+            total_size_result = await db.fetch_one(
+                "SELECT COALESCE(SUM(size), 0) as total FROM documents WHERE user_id = $1",
+                user_id
+            )
+            avg_processing_result = await db.fetch_one(
+                """
+                SELECT AVG(processing_time) as avg_time
+                FROM documents
+                WHERE user_id = $1 AND processing_time IS NOT NULL
+                """,
+                user_id
+            )
+            total_chunks_result = await db.fetch_one(
+                "SELECT COALESCE(SUM(chunks), 0) as total FROM documents WHERE user_id = $1",
+                user_id
+            )
+            active_sessions_result = await db.fetch_one(
+                "SELECT COUNT(*) as count FROM chat_sessions WHERE user_id = $1 AND ended_at IS NULL",
+                user_id
+            )
+
         total_size = total_size_result['total'] if total_size_result else 0
-
-        # Tempo médio de processamento
-        avg_processing_result = await db.fetch_one(
-            """
-            SELECT AVG(processing_time) as avg_time
-            FROM documents
-            WHERE user_id = $1 AND processing_time IS NOT NULL
-            """,
-            user_id
-        )
         avg_processing_time = float(avg_processing_result['avg_time']) if avg_processing_result and avg_processing_result['avg_time'] else 0
-
-        # Total de chunks
-        total_chunks_result = await db.fetch_one(
-            "SELECT COALESCE(SUM(chunks), 0) as total FROM documents WHERE user_id = $1",
-            user_id
-        )
         total_chunks = total_chunks_result['total'] if total_chunks_result else 0
-
-        # Sessões ativas
-        active_sessions_result = await db.fetch_one(
-            "SELECT COUNT(*) as count FROM chat_sessions WHERE user_id = $1 AND ended_at IS NULL",
-            user_id
-        )
         active_sessions = active_sessions_result['count'] if active_sessions_result else 0
 
         return {
