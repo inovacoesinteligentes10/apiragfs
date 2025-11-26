@@ -175,9 +175,13 @@ class ApiService {
             formData.append('metadata', JSON.stringify(metadata));
         }
 
-        // Iniciar upload
+        // Iniciar upload com autenticação JWT
+        const token = localStorage.getItem('access_token');
         const response = await fetch(`${this.baseUrl}/api/v1/documents/upload`, {
             method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${token}`,
+            },
             body: formData,
         });
 
