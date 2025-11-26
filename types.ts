@@ -63,3 +63,28 @@ export interface ProcessedDocument {
     uploadDate: Date;
     error?: string;
 }
+
+export interface User {
+    id: string;
+    email: string;
+    name: string;
+    role: 'student' | 'professor' | 'admin';
+    is_active: boolean;
+    created_at: string;
+    last_login: string | null;
+    stats?: UserStats;
+}
+
+export interface UserStats {
+    total_documents: number;
+    total_sessions: number;
+    total_messages: number;
+}
+
+export interface UserFormData {
+    email: string;
+    name: string;
+    role: 'student' | 'professor' | 'admin';
+    password?: string;
+    is_active?: boolean;
+}

@@ -4,9 +4,12 @@
 */
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { Toaster } from 'react-hot-toast';
 import { AppStatus, ChatMessage, ProcessedDocument } from './types';
 import * as geminiService from './services/geminiService';
 import { apiService, RagStore } from './services/apiService';
+import { showSuccess, showError, showInfo, showWarning } from './utils/toast';
+import { AuthProvider, useAuth } from './contexts/AuthContext';
 import Spinner from './components/Spinner';
 import Sidebar from './components/Sidebar';
 import Dashboard from './components/Dashboard';
@@ -18,7 +21,11 @@ import Analytics from './components/Analytics';
 import StatusView from './components/StatusView';
 import Settings from './components/Settings';
 import StoreManagement from './components/StoreManagement';
+import UsersManagement from './components/UsersManagement';
+import ChatsView from './components/ChatsView';
 import DeleteConfirmationModal from './components/DeleteConfirmationModal';
+import AuthModal from './components/AuthModal';
+import UserMenu from './components/UserMenu';
 
 // DO: Define the AIStudio interface to resolve a type conflict where `window.aistudio` was being redeclared with an anonymous type.
 // FIX: Moved the AIStudio interface definition inside the `declare global` block to resolve a TypeScript type conflict.
@@ -32,8 +39,10 @@ declare global {
     }
 }
 
-const App: React.FC = () => {
-    const [currentView, setCurrentView] = useState<'dashboard' | 'documents' | 'chat' | 'analytics' | 'status' | 'settings' | 'stores'>('dashboard');
+const AppContent: React.FC = () => {
+    const { user, loading: authLoading } = useAuth();
+    const [showAuthModal, setShowAuthModal] = useState(false);
+    const [currentView, setCurrentView] = useState<'dashboard' | 'documents' | 'chat' | 'analytics' | 'status' | 'settings' | 'stores' | 'users' | 'chats'>('dashboard');
     const [status, setStatus] = useState<AppStatus>(AppStatus.Welcome);
     const [isApiKeySelected, setIsApiKeySelected] = useState(false);
     const [apiKeyError, setApiKeyError] = useState<string | null>(null);
@@ -362,6 +371,7 @@ const App: React.FC = () => {
                     };
 
                     setProcessedDocuments(prev => [...prev, doc]);
+                    showSuccess(`Documento ${file.name} processado com sucesso!`);
 
                 } catch (err) {
                     const doc: ProcessedDocument = {
@@ -381,11 +391,13 @@ const App: React.FC = () => {
                     };
 
                     setProcessedDocuments(prev => [...prev, doc]);
+                    showError(`Erro ao processar ${file.name}: ${err instanceof Error ? err.message : 'Erro desconhecido'}`);
                     handleError("Falha ao fazer upload", err);
                 }
             }
 
             setUploadProgress({ current: totalSteps, total: totalSteps, message: "Upload concluído!", fileName: "" });
+            showInfo(`${files.length} documento(s) processado(s) com sucesso!`);
             await new Promise(resolve => setTimeout(resolve, 1000));
 
             // Recarregar stores para atualizar contagem de documentos
@@ -437,6 +449,8 @@ const App: React.FC = () => {
             await apiService.deleteDocument(deleteModal.documentId);
             setProcessedDocuments(prev => prev.filter(doc => doc.id !== deleteModal.documentId));
 
+            showSuccess(`Documento "${deleteModal.documentName}" excluído com sucesso!`);
+
             // Recarregar stores para atualizar contagem
             try {
                 const updatedStores = await apiService.listRagStores();
@@ -461,8 +475,8 @@ const App: React.FC = () => {
             });
         } catch (err) {
             console.error('Erro ao deletar documento:', err);
+            showError(`Erro ao excluir documento: ${err instanceof Error ? err.message : 'Erro desconhecido'}`);
             setDeleteModal(prev => ({ ...prev, isDeleting: false }));
-            alert('Erro ao deletar documento. Por favor, tente novamente.');
         }
     };
 
@@ -970,6 +984,10 @@ const App: React.FC = () => {
                 return <Settings />;
             case 'stores':
                 return <StoreManagement />;
+            case 'users':
+                return <UsersManagement />;
+            case 'chats':
+                return <ChatsView />;
             default:
                 return <Dashboard
                     onNavigateToDocuments={() => setCurrentView('documents')}
@@ -1005,6 +1023,11 @@ const App: React.FC = () => {
                     currentView={currentView}
                     onNavigate={setCurrentView}
                     hasActiveSession={status === AppStatus.Chatting || hasDocumentsForChat}
+                    onOpenAuth={() => setShowAuthModal(true)}
+                    onNewChat={() => {
+                        // TODO: Implement new chat logic
+                        setCurrentView('chat');
+                    }}
                 />
                 {renderMainContent()}
             </main>
@@ -1019,7 +1042,26 @@ const App: React.FC = () => {
                 documentName={deleteModal.documentName || undefined}
                 isDeleting={deleteModal.isDeleting}
             />
+
+            {/* Toast notifications */}
+            <Toaster position="top-right" />
+
+            {/* Auth Modal */}
+            <AuthModal
+                isOpen={showAuthModal}
+                onClose={() => setShowAuthModal(false)}
+                initialMode="login"
+            />
         </>
+    );
+};
+
+// Wrapper principal com AuthProvider
+const App: React.FC = () => {
+    return (
+        <AuthProvider>
+            <AppContent />
+        </AuthProvider>
     );
 };
 
