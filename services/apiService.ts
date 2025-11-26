@@ -782,6 +782,26 @@ class ApiService {
 
         return response.json();
     }
+
+    // ===== User Management Methods =====
+
+    /**
+     * Listar todos os usuários
+     */
+    async listUsers(): Promise<import('../types').User[]> {
+        const token = localStorage.getItem('access_token');
+        const response = await fetch(`${this.baseUrl}/api/v1/users/`, {
+            headers: {
+                'Authorization': `Bearer ${token}`,
+            },
+        });
+
+        if (!response.ok) {
+            throw new Error('Erro ao listar usuários');
+        }
+
+        return response.json();
+    }
 }
 
 // Instância global

@@ -4,12 +4,14 @@
 */
 import React, { useState, useEffect } from 'react';
 import { apiService, RagStore, RagStoreCreate } from '../services/apiService';
+import StorePermissionsModal from './StorePermissionsModal';
+import type { StoreWithPermissions } from '../types';
 
 const StoreManagement: React.FC = () => {
-    const [stores, setStores] = useState<RagStore[]>([]);
+    const [stores, setStores] = useState<StoreWithPermissions[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [isModalOpen, setIsModalOpen] = useState(false);
-    const [editingStore, setEditingStore] = useState<RagStore | null>(null);
+    const [editingStore, setEditingStore] = useState<StoreWithPermissions | null>(null);
     const [formData, setFormData] = useState<RagStoreCreate>({
         name: '',
         display_name: '',
@@ -18,6 +20,7 @@ const StoreManagement: React.FC = () => {
         color: 'blue'
     });
     const [error, setError] = useState<string | null>(null);
+    const [permissionsModalStore, setPermissionsModalStore] = useState<{ id: string; name: string } | null>(null);
 
     const iconOptions = [
         { value: 'folder', label: 'Pasta', icon: 'M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z' },
@@ -60,7 +63,7 @@ const StoreManagement: React.FC = () => {
         }
     };
 
-    const handleOpenModal = (store?: RagStore) => {
+    const handleOpenModal = (store?: StoreWithPermissions) => {
         if (store) {
             setEditingStore(store);
             setFormData({
@@ -83,6 +86,14 @@ const StoreManagement: React.FC = () => {
         setIsModalOpen(true);
     };
 
+    const handleOpenPermissionsModal = (storeId: string, storeName: string) => {
+        setPermissionsModalStore({ id: storeId, name: storeName });
+    };
+
+    const handleClosePermissionsModal = () => {
+        setPermissionsModalStore(null);
+    };
+
     const handleCloseModal = () => {
         setIsModalOpen(false);
         setEditingStore(null);
@@ -101,7 +112,7 @@ const StoreManagement: React.FC = () => {
 
         try {
             if (editingStore) {
-                await apiService.updateRagStore(editingStore.name, formData);
+                await apiService.updateRagStore(editingStore.id, formData);
                 await loadStores();
                 handleCloseModal();
             } else {
@@ -114,14 +125,14 @@ const StoreManagement: React.FC = () => {
         }
     };
 
-    const handleDelete = async (storeName: string) => {
+    const handleDelete = async (storeId: string, storeName: string) => {
         if (!confirm(`Tem certeza que deseja deletar o store "${storeName}"? Esta ação não pode ser desfeita.`)) {
             return;
         }
 
         setError(null);
         try {
-            await apiService.deleteRagStore(storeName);
+            await apiService.deleteRagStore(storeId);
             await loadStores();
         } catch (err) {
             setError('Erro ao deletar store: ' + (err instanceof Error ? err.message : String(err)));
@@ -226,26 +237,42 @@ const StoreManagement: React.FC = () => {
                             </div>
 
                             {/* Actions */}
-                            <div className="mt-6 pt-4 border-t border-slate-200 flex items-center justify-end space-x-2">
-                                <button
-                                    onClick={() => handleOpenModal(store)}
-                                    className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
-                                    title="Editar store"
-                                >
-                                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                                    </svg>
-                                </button>
-                                <button
-                                    onClick={() => handleDelete(store.name)}
-                                    disabled={store.document_count > 0}
-                                    className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                                    title={store.document_count > 0 ? 'Não é possível deletar store com documentos' : 'Deletar store'}
-                                >
-                                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                                    </svg>
-                                </button>
+                            <div className="mt-6 pt-4 border-t border-slate-200 flex items-center justify-between">
+                                <div>
+                                    {store.can_manage && (
+                                        <button
+                                            onClick={() => handleOpenPermissionsModal(store.id, store.display_name)}
+                                            className="flex items-center space-x-1 px-3 py-2 text-sm text-purple-600 hover:bg-purple-50 rounded-lg transition-colors"
+                                            title="Gerenciar permissões"
+                                        >
+                                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
+                                            </svg>
+                                            <span>Permissões</span>
+                                        </button>
+                                    )}
+                                </div>
+                                <div className="flex items-center space-x-2">
+                                    <button
+                                        onClick={() => handleOpenModal(store)}
+                                        className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                                        title="Editar store"
+                                    >
+                                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                                        </svg>
+                                    </button>
+                                    <button
+                                        onClick={() => handleDelete(store.id, store.display_name)}
+                                        disabled={store.document_count > 0}
+                                        className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                        title={store.document_count > 0 ? 'Não é possível deletar store com documentos' : 'Deletar store'}
+                                    >
+                                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                        </svg>
+                                    </button>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -394,6 +421,16 @@ const StoreManagement: React.FC = () => {
                         </form>
                     </div>
                 </div>
+            )}
+
+            {/* Permissions Modal */}
+            {permissionsModalStore && (
+                <StorePermissionsModal
+                    storeId={permissionsModalStore.id}
+                    storeName={permissionsModalStore.name}
+                    isOpen={!!permissionsModalStore}
+                    onClose={handleClosePermissionsModal}
+                />
             )}
         </div>
     );
