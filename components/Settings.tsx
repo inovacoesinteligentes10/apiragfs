@@ -4,7 +4,8 @@
 */
 
 import React, { useState, useEffect } from 'react';
-import { apiService } from '../services/apiService';
+import { apiService, GeneralSettingsResponse } from '../services/apiService';
+import { useSystemConfig } from '../contexts/SystemConfigContext';
 
 const DEFAULT_SYSTEM_PROMPT = `# ApiRAGFS - Assistente RAG com Google Gemini File Search
 
@@ -32,6 +33,7 @@ Declare explicitamente: "Nao encontrei essa informacao especifica nos documentos
 Responda seguindo rigorosamente estas diretrizes. Lembre-se: FIDELIDADE AO DOCUMENTO e prioridade maxima.`;
 
 const Settings: React.FC = () => {
+    const { refreshConfig } = useSystemConfig();
     const [settings, setSettings] = useState({
         apiKey: '••••••••••••••••••••',
         model: 'gemini-2.5-flash', // Valor real usado no backend (settings.py)
@@ -41,16 +43,22 @@ const Settings: React.FC = () => {
         theme: 'light',
         notifications: true,
         autoSave: true,
+        systemName: 'ApiRAGFS',
+        systemDescription: 'Sistema RAG com Google Gemini File Search',
+        systemLogo: '📚',
         contextWindow: 1000000, // Context window do Gemini 2.5 Flash
         systemPrompt: DEFAULT_SYSTEM_PROMPT
     });
 
     const [loading, setLoading] = useState(false);
     const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'success' | 'error'>('idle');
+    const [generalSettingsSaveStatus, setGeneralSettingsSaveStatus] = useState<'idle' | 'saving' | 'success' | 'error'>('idle');
+    const [isAdmin, setIsAdmin] = useState(false);
 
-    // Carregar system prompt do backend ao montar o componente
+    // Carregar configurações do backend ao montar o componente
     useEffect(() => {
         loadSystemPrompt();
+        loadGeneralSettings();
     }, []);
 
     const loadSystemPrompt = async () => {
@@ -66,6 +74,26 @@ const Settings: React.FC = () => {
             // Manter o padrão se falhar
         } finally {
             setLoading(false);
+        }
+    };
+
+    const loadGeneralSettings = async () => {
+        try {
+            const response = await apiService.getGeneralSettings();
+            setIsAdmin(response.is_admin);
+            setSettings(prev => ({
+                ...prev,
+                language: response.language,
+                theme: response.theme,
+                notifications: response.notifications,
+                autoSave: response.auto_save,
+                systemName: response.system_name,
+                systemDescription: response.system_description,
+                systemLogo: response.system_logo
+            }));
+        } catch (error) {
+            console.error('Erro ao carregar configurações gerais:', error);
+            // Manter os padrões se falhar
         }
     };
 
@@ -103,13 +131,80 @@ const Settings: React.FC = () => {
         }
     };
 
+    const handleSaveGeneralSettings = async () => {
+        try {
+            setGeneralSettingsSaveStatus('saving');
+            await apiService.updateGeneralSettings({
+                language: settings.language as 'pt-BR' | 'en-US' | 'es-ES',
+                theme: settings.theme as 'light' | 'dark' | 'auto',
+                notifications: settings.notifications,
+                auto_save: settings.autoSave,
+                system_name: settings.systemName,
+                system_description: settings.systemDescription,
+                system_logo: settings.systemLogo
+            });
+            setGeneralSettingsSaveStatus('success');
+            setTimeout(() => setGeneralSettingsSaveStatus('idle'), 3000);
+
+            // Atualizar contexto global e aplicar tema
+            await refreshConfig();
+        } catch (error) {
+            console.error('Erro ao salvar configurações gerais:', error);
+            setGeneralSettingsSaveStatus('error');
+            setTimeout(() => setGeneralSettingsSaveStatus('idle'), 3000);
+        }
+    };
+
+    const handleResetGeneralSettings = async () => {
+        if (!confirm('Tem certeza que deseja restaurar as configurações gerais para o padrão?')) {
+            return;
+        }
+
+        try {
+            const response = await apiService.resetGeneralSettings();
+            setSettings(prev => ({
+                ...prev,
+                language: response.language,
+                theme: response.theme,
+                notifications: response.notifications,
+                autoSave: response.auto_save,
+                systemName: response.system_name,
+                systemDescription: response.system_description,
+                systemLogo: response.system_logo
+            }));
+            alert('Configurações gerais restauradas com sucesso!');
+
+            // Atualizar contexto global
+            await refreshConfig();
+        } catch (error) {
+            console.error('Erro ao resetar configurações gerais:', error);
+            alert('Erro ao restaurar configurações padrão');
+        }
+    };
+
+    const applyTheme = (theme: string) => {
+        if (theme === 'dark') {
+            document.documentElement.classList.add('dark');
+        } else if (theme === 'light') {
+            document.documentElement.classList.remove('dark');
+        } else if (theme === 'auto') {
+            // Detectar preferência do sistema
+            const isDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+            if (isDark) {
+                document.documentElement.classList.add('dark');
+            } else {
+                document.documentElement.classList.remove('dark');
+            }
+        }
+    };
+
     return (
         <div className="flex-1 bg-gradient-to-br from-slate-50 to-slate-100 p-8 overflow-y-auto">
             <div className="max-w-4xl mx-auto">
                 {/* Header */}
                 <div className="mb-8">
                     <h1 className="text-3xl font-bold text-slate-800 mb-2">Configurações</h1>
-                    <p className="text-slate-600">Personalize o ApiRAGFS de acordo com suas necessidades</p>
+                    <p className="text-slate-600">Personalize o sistema de acordo com suas necessidades</p>
                 </div>
 
                 {/* API Configuration */}
@@ -212,48 +307,50 @@ const Settings: React.FC = () => {
                     </div>
                 </div>
 
-                {/* System Prompt Configuration */}
-                <div className="bg-white rounded-xl shadow-md border border-slate-200 p-6 mb-6">
-                    <h3 className="text-lg font-bold text-slate-800 mb-4 flex items-center">
-                        <svg className="w-5 h-5 mr-2 text-orange-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                        </svg>
-                        System Prompt do RAG
-                    </h3>
-                    <div className="space-y-4">
-                        <div>
-                            <label className="block text-sm font-medium text-slate-700 mb-2">
-                                Prompt do Sistema
-                                {loading && (
-                                    <span className="ml-2 text-xs text-blue-600">Carregando...</span>
-                                )}
-                            </label>
-                            <textarea
-                                value={settings.systemPrompt}
-                                onChange={(e) => setSettings({ ...settings, systemPrompt: e.target.value })}
-                                rows={15}
-                                disabled={loading}
-                                className="w-full px-4 py-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 font-mono text-sm disabled:opacity-50 disabled:cursor-not-allowed"
-                                placeholder="Digite o prompt do sistema..."
-                            />
-                            <p className="text-xs text-slate-500 mt-2">
-                                Este prompt define o comportamento do assistente RAG. Ele será usado em todas as consultas aos documentos.
-                            </p>
-                        </div>
-                        <div className="flex items-start space-x-2 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
-                            <svg className="w-5 h-5 text-yellow-600 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                {/* System Prompt Configuration - Apenas para Admin */}
+                {isAdmin && (
+                    <div className="bg-white rounded-xl shadow-md border border-slate-200 p-6 mb-6">
+                        <h3 className="text-lg font-bold text-slate-800 mb-4 flex items-center">
+                            <svg className="w-5 h-5 mr-2 text-orange-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                             </svg>
+                            System Prompt do RAG
+                        </h3>
+                        <div className="space-y-4">
                             <div>
-                                <h4 className="text-sm font-medium text-yellow-800">Atenção</h4>
-                                <p className="text-xs text-yellow-700 mt-1">
-                                    Alterar o prompt do sistema pode afetar significativamente a qualidade e o comportamento das respostas.
-                                    Mantenha instruções claras sobre fidelidade aos documentos fornecidos.
+                                <label className="block text-sm font-medium text-slate-700 mb-2">
+                                    Prompt do Sistema
+                                    {loading && (
+                                        <span className="ml-2 text-xs text-blue-600">Carregando...</span>
+                                    )}
+                                </label>
+                                <textarea
+                                    value={settings.systemPrompt}
+                                    onChange={(e) => setSettings({ ...settings, systemPrompt: e.target.value })}
+                                    rows={15}
+                                    disabled={loading}
+                                    className="w-full px-4 py-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 font-mono text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+                                    placeholder="Digite o prompt do sistema..."
+                                />
+                                <p className="text-xs text-slate-500 mt-2">
+                                    Este prompt define o comportamento do assistente RAG. Ele será usado em todas as consultas aos documentos.
                                 </p>
+                            </div>
+                            <div className="flex items-start space-x-2 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
+                                <svg className="w-5 h-5 text-yellow-600 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                                </svg>
+                                <div>
+                                    <h4 className="text-sm font-medium text-yellow-800">Atenção</h4>
+                                    <p className="text-xs text-yellow-700 mt-1">
+                                        Alterar o prompt do sistema pode afetar significativamente a qualidade e o comportamento das respostas.
+                                        Mantenha instruções claras sobre fidelidade aos documentos fornecidos.
+                                    </p>
+                                </div>
                             </div>
                         </div>
                     </div>
-                </div>
+                )}
 
                 {/* General Settings */}
                 <div className="bg-white rounded-xl shadow-md border border-slate-200 p-6 mb-6">
@@ -265,95 +362,196 @@ const Settings: React.FC = () => {
                             </svg>
                             Configurações Gerais
                         </h3>
-                        <span className="px-2 py-1 bg-gray-100 text-gray-600 text-xs font-medium rounded-full">
-                            Planejado
+                        <span className="px-2 py-1 bg-green-100 text-green-700 text-xs font-medium rounded-full">
+                            Ativo
                         </span>
                     </div>
-                    <div className="mb-3 p-3 bg-gray-50 border border-gray-200 rounded-lg">
-                        <p className="text-xs text-gray-600">
-                            ℹ️ Estas configurações de interface estão planejadas para implementação futura.
-                        </p>
-                    </div>
                     <div className="space-y-4">
-                        <div>
-                            <label className="block text-sm font-medium text-slate-700 mb-2">Idioma</label>
-                            <select
-                                value={settings.language}
-                                disabled
-                                className="w-full px-4 py-2 border border-slate-300 rounded-lg bg-slate-50 cursor-not-allowed"
-                            >
-                                <option value="pt-BR">Português (Brasil)</option>
-                                <option value="en-US">English (US)</option>
-                                <option value="es-ES">Español</option>
-                            </select>
-                            <p className="text-xs text-slate-500 mt-1">Funcionalidade planejada</p>
-                        </div>
+                        {/* Configurações de Sistema - Apenas para Admin */}
+                        {isAdmin && (
+                            <>
+                                <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                                    <p className="text-sm text-blue-800 font-medium">
+                                        🔐 Configurações de Sistema (Apenas Administrador)
+                                    </p>
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium text-slate-700 mb-2">Nome do Sistema</label>
+                                    <input
+                                        type="text"
+                                        value={settings.systemName}
+                                        onChange={(e) => setSettings({ ...settings, systemName: e.target.value })}
+                                        maxLength={50}
+                                        className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500"
+                                        placeholder="ApiRAGFS"
+                                    />
+                                    <p className="text-xs text-slate-500 mt-1">Nome exibido no cabeçalho e título da aplicação</p>
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium text-slate-700 mb-2">Descrição do Sistema</label>
+                                    <input
+                                        type="text"
+                                        value={settings.systemDescription}
+                                        onChange={(e) => setSettings({ ...settings, systemDescription: e.target.value })}
+                                        maxLength={200}
+                                        className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500"
+                                        placeholder="Sistema RAG com Google Gemini File Search"
+                                    />
+                                    <p className="text-xs text-slate-500 mt-1">Descrição exibida na tela de boas-vindas</p>
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium text-slate-700 mb-2">Logotipo (Emoji)</label>
+                                    <input
+                                        type="text"
+                                        value={settings.systemLogo}
+                                        onChange={(e) => setSettings({ ...settings, systemLogo: e.target.value })}
+                                        maxLength={4}
+                                        className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500 text-2xl"
+                                        placeholder="📚"
+                                    />
+                                    <p className="text-xs text-slate-500 mt-1">Emoji ou ícone exibido no cabeçalho (máx: 4 caracteres)</p>
+                                </div>
+                                <div className="border-t border-slate-200 my-6"></div>
+                            </>
+                        )}
+
+                        {/* Configurações Pessoais - Todos os usuários */}
+                        {!isAdmin && (
+                            <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                                <p className="text-sm text-blue-800 font-medium">
+                                    👤 Configuração de Usuário
+                                </p>
+                                <p className="text-xs text-blue-600 mt-1">
+                                    Você pode personalizar apenas o tema da interface. Outras configurações são gerenciadas pelo administrador.
+                                </p>
+                            </div>
+                        )}
+                        {isAdmin && (
+                            <div>
+                                <label className="block text-sm font-medium text-slate-700 mb-2">Idioma</label>
+                                <select
+                                    value={settings.language}
+                                    onChange={(e) => setSettings({ ...settings, language: e.target.value })}
+                                    className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500"
+                                >
+                                    <option value="pt-BR">Português (Brasil)</option>
+                                    <option value="en-US">English (US)</option>
+                                    <option value="es-ES">Español</option>
+                                </select>
+                                <p className="text-xs text-slate-500 mt-1">Idioma da interface do usuário</p>
+                            </div>
+                        )}
                         <div>
                             <label className="block text-sm font-medium text-slate-700 mb-2">Tema</label>
                             <select
                                 value={settings.theme}
-                                disabled
-                                className="w-full px-4 py-2 border border-slate-300 rounded-lg bg-slate-50 cursor-not-allowed"
+                                onChange={(e) => setSettings({ ...settings, theme: e.target.value })}
+                                className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500"
                             >
                                 <option value="light">Claro</option>
                                 <option value="dark">Escuro</option>
                                 <option value="auto">Automático</option>
                             </select>
-                            <p className="text-xs text-slate-500 mt-1">Funcionalidade planejada</p>
+                            <p className="text-xs text-slate-500 mt-1">Aparência da interface</p>
                         </div>
-                        <div className="flex items-center justify-between p-4 bg-slate-50 rounded-lg border border-slate-200 opacity-60">
-                            <div>
-                                <h4 className="text-sm font-medium text-slate-700">Notificações</h4>
-                                <p className="text-xs text-slate-500">Funcionalidade planejada</p>
-                            </div>
+                        {isAdmin && (
+                            <>
+                                <div className="flex items-center justify-between p-4 bg-slate-50 rounded-lg border border-slate-200">
+                                    <div>
+                                        <h4 className="text-sm font-medium text-slate-700">Notificações</h4>
+                                        <p className="text-xs text-slate-500">Receber notificações sobre eventos importantes</p>
+                                    </div>
+                                    <button
+                                        onClick={() => setSettings({ ...settings, notifications: !settings.notifications })}
+                                        className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                                            settings.notifications ? 'bg-green-600' : 'bg-slate-300'
+                                        }`}
+                                    >
+                                        <span
+                                            className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                                                settings.notifications ? 'translate-x-6' : 'translate-x-1'
+                                            }`}
+                                        />
+                                    </button>
+                                </div>
+                                <div className="flex items-center justify-between p-4 bg-slate-50 rounded-lg border border-slate-200">
+                                    <div>
+                                        <h4 className="text-sm font-medium text-slate-700">Auto-save</h4>
+                                        <p className="text-xs text-slate-500">Salvar automaticamente alterações</p>
+                                    </div>
+                                    <button
+                                        onClick={() => setSettings({ ...settings, autoSave: !settings.autoSave })}
+                                        className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                                            settings.autoSave ? 'bg-green-600' : 'bg-slate-300'
+                                        }`}
+                                    >
+                                        <span
+                                            className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                                                settings.autoSave ? 'translate-x-6' : 'translate-x-1'
+                                            }`}
+                                        />
+                                    </button>
+                                </div>
+                            </>
+                        )}
+                    </div>
+                    <div className="mt-6 flex justify-between items-center">
+                        {isAdmin && (
                             <button
-                                disabled
-                                className="relative inline-flex h-6 w-11 items-center rounded-full bg-slate-300 cursor-not-allowed"
+                                onClick={handleResetGeneralSettings}
+                                className="px-4 py-2 bg-slate-200 text-slate-700 rounded-lg hover:bg-slate-300 transition-all text-sm"
                             >
-                                <span className="inline-block h-4 w-4 transform rounded-full bg-white translate-x-1" />
+                                Restaurar Padrões
                             </button>
-                        </div>
-                        <div className="flex items-center justify-between p-4 bg-slate-50 rounded-lg border border-slate-200 opacity-60">
-                            <div>
-                                <h4 className="text-sm font-medium text-slate-700">Auto-save</h4>
-                                <p className="text-xs text-slate-500">Funcionalidade planejada</p>
-                            </div>
-                            <button
-                                disabled
-                                className="relative inline-flex h-6 w-11 items-center rounded-full bg-slate-300 cursor-not-allowed"
-                            >
-                                <span className="inline-block h-4 w-4 transform rounded-full bg-white translate-x-1" />
-                            </button>
-                        </div>
+                        )}
+                        {!isAdmin && <div></div>}
+                        <button
+                            onClick={handleSaveGeneralSettings}
+                            disabled={generalSettingsSaveStatus === 'saving'}
+                            className={`px-6 py-2 rounded-lg transition-all shadow-lg hover:shadow-xl ${
+                                generalSettingsSaveStatus === 'success'
+                                    ? 'bg-green-600 text-white'
+                                    : generalSettingsSaveStatus === 'error'
+                                    ? 'bg-red-600 text-white'
+                                    : 'bg-gradient-to-r from-green-600 to-emerald-600 text-white hover:from-green-700 hover:to-emerald-700'
+                            } disabled:opacity-50 disabled:cursor-not-allowed`}
+                        >
+                            {generalSettingsSaveStatus === 'saving' && 'Salvando...'}
+                            {generalSettingsSaveStatus === 'success' && '✓ Salvo!'}
+                            {generalSettingsSaveStatus === 'error' && '✗ Erro'}
+                            {generalSettingsSaveStatus === 'idle' && (isAdmin ? 'Salvar' : 'Salvar Tema')}
+                        </button>
                     </div>
                 </div>
 
-                {/* Action Buttons */}
-                <div className="flex justify-between items-center">
-                    <button
-                        onClick={handleReset}
-                        disabled={loading}
-                        className="px-6 py-2 bg-slate-200 text-slate-700 rounded-lg hover:bg-slate-300 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-                    >
-                        {loading ? 'Carregando...' : 'Restaurar Padrões'}
-                    </button>
-                    <button
-                        onClick={handleSave}
-                        disabled={saveStatus === 'saving'}
-                        className={`px-6 py-2 rounded-lg transition-all shadow-lg hover:shadow-xl ${
-                            saveStatus === 'success'
-                                ? 'bg-green-600 text-white'
-                                : saveStatus === 'error'
-                                ? 'bg-red-600 text-white'
-                                : 'bg-gradient-to-r from-blue-600 to-purple-600 text-white hover:from-blue-700 hover:to-purple-700'
-                        } disabled:opacity-50 disabled:cursor-not-allowed`}
-                    >
-                        {saveStatus === 'saving' && 'Salvando...'}
-                        {saveStatus === 'success' && '✓ Salvo com sucesso!'}
-                        {saveStatus === 'error' && '✗ Erro ao salvar'}
-                        {saveStatus === 'idle' && 'Salvar Configurações'}
-                    </button>
-                </div>
+                {/* Action Buttons - Apenas para Admin */}
+                {isAdmin && (
+                    <div className="flex justify-between items-center">
+                        <button
+                            onClick={handleReset}
+                            disabled={loading}
+                            className="px-6 py-2 bg-slate-200 text-slate-700 rounded-lg hover:bg-slate-300 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                            {loading ? 'Carregando...' : 'Restaurar Padrões'}
+                        </button>
+                        <button
+                            onClick={handleSave}
+                            disabled={saveStatus === 'saving'}
+                            className={`px-6 py-2 rounded-lg transition-all shadow-lg hover:shadow-xl ${
+                                saveStatus === 'success'
+                                    ? 'bg-green-600 text-white'
+                                    : saveStatus === 'error'
+                                    ? 'bg-red-600 text-white'
+                                    : 'bg-gradient-to-r from-blue-600 to-purple-600 text-white hover:from-blue-700 hover:to-purple-700'
+                            } disabled:opacity-50 disabled:cursor-not-allowed`}
+                        >
+                            {saveStatus === 'saving' && 'Salvando...'}
+                            {saveStatus === 'success' && '✓ Salvo com sucesso!'}
+                            {saveStatus === 'error' && '✗ Erro ao salvar'}
+                            {saveStatus === 'idle' && 'Salvar Configurações'}
+                        </button>
+                    </div>
+                )}
             </div>
         </div>
     );

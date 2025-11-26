@@ -9,6 +9,7 @@ import Spinner from './Spinner';
 import SendIcon from './icons/SendIcon';
 import RefreshIcon from './icons/RefreshIcon';
 import StoreSelector from './StoreSelector';
+import { useSystemConfig } from '../contexts/SystemConfigContext';
 
 interface DocumentInsight {
     title: string;
@@ -39,6 +40,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
     selectedStore = null,
     onSelectStore
 }) => {
+    const { config } = useSystemConfig();
     const [query, setQuery] = useState('');
     const [currentSuggestion, setCurrentSuggestion] = useState('');
     const [modalContent, setModalContent] = useState<string | null>(null);
@@ -196,7 +198,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
                         </div>
                         <div>
                             <h1 className="text-2xl font-bold text-slate-800">
-                                ApiRAGFS Chat
+                                {config.systemName} Chat
                             </h1>
                             <p className="text-sm text-slate-600">Converse com todos os seus documentos</p>
                         </div>
@@ -222,9 +224,9 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
                                 </svg>
                             </div>
-                            <h2 className="text-2xl font-bold text-slate-800 mb-3">Bem-vindo ao ApiRAGFS!</h2>
+                            <h2 className="text-2xl font-bold text-slate-800 mb-3">Bem-vindo ao {config.systemName}!</h2>
                             <p className="text-slate-600 mb-6 max-w-2xl mx-auto">
-                                Faça perguntas sobre seus documentos. Receba respostas precisas baseadas no conteúdo dos arquivos enviados.
+                                {config.systemDescription}
                             </p>
 
                             {/* Insights Cards */}

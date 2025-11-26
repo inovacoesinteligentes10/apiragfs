@@ -10,6 +10,7 @@ import * as geminiService from './services/geminiService';
 import { apiService, RagStore } from './services/apiService';
 import { showSuccess, showError, showInfo, showWarning } from './utils/toast';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
+import { SystemConfigProvider } from './contexts/SystemConfigContext';
 import Spinner from './components/Spinner';
 import Sidebar from './components/Sidebar';
 import Dashboard from './components/Dashboard';
@@ -75,6 +76,68 @@ const AppContent: React.FC = () => {
     useEffect(() => {
         ragStoreNameRef.current = activeRagStoreName;
     }, [activeRagStoreName]);
+
+    // Recarregar todos os dados quando o usuário mudar (login/logout)
+    useEffect(() => {
+        const reloadAllData = async () => {
+            if (!user) {
+                // Limpar todos os dados ao fazer logout
+                setProcessedDocuments([]);
+                setRagStores([]);
+                setSelectedStore(null);
+                setChatHistory([]);
+                setActiveRagStoreName(null);
+                setCurrentView('dashboard');
+                return;
+            }
+
+            // Recarregar stores
+            try {
+                const stores = await apiService.listRagStores();
+                console.log('📦 RAG Stores recarregados para usuário:', user.username);
+                setRagStores(stores);
+
+                if (stores.length > 0) {
+                    const storeWithDocs = stores.find(s => s.document_count > 0) || stores[0];
+                    setSelectedStore(storeWithDocs);
+                }
+            } catch (err) {
+                console.error('Erro ao recarregar stores:', err);
+            }
+
+            // Recarregar documentos
+            try {
+                const docs = await apiService.listDocuments();
+                const stores = await apiService.listRagStores();
+                const storeMap = new Map(stores.map(s => [s.name, s.display_name]));
+
+                const processedDocs: ProcessedDocument[] = docs.map(doc => ({
+                    id: doc.id,
+                    name: doc.name,
+                    type: doc.type,
+                    size: doc.size,
+                    textLength: doc.text_length,
+                    extractionMethod: doc.extraction_method,
+                    department: doc.department || null,
+                    departmentDisplayName: doc.department ? storeMap.get(doc.department) || doc.department : null,
+                    chunks: doc.chunks,
+                    processingTime: doc.processing_time,
+                    status: doc.status,
+                    progressPercent: doc.progress_percent,
+                    statusMessage: doc.status_message,
+                    errorMessage: doc.error_message,
+                    uploadDate: doc.upload_date
+                }));
+
+                setProcessedDocuments(processedDocs);
+                console.log('📄 Documentos recarregados:', processedDocs.length);
+            } catch (err) {
+                console.error('Erro ao recarregar documentos:', err);
+            }
+        };
+
+        reloadAllData();
+    }, [user?.id]); // Observa mudanças no ID do usuário
     
     const checkApiKey = useCallback(async () => {
         if (window.aistudio?.hasSelectedApiKey) {
@@ -1056,11 +1119,13 @@ const AppContent: React.FC = () => {
     );
 };
 
-// Wrapper principal com AuthProvider
+// Wrapper principal com AuthProvider e SystemConfigProvider
 const App: React.FC = () => {
     return (
         <AuthProvider>
-            <AppContent />
+            <SystemConfigProvider>
+                <AppContent />
+            </SystemConfigProvider>
         </AuthProvider>
     );
 };

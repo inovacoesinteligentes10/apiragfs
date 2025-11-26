@@ -6,6 +6,7 @@
 import React, { useState, useEffect } from 'react';
 import minioService from '../services/minioService';
 import { apiService } from '../services/apiService';
+import { useSystemConfig } from '../contexts/SystemConfigContext';
 
 interface HealthStatus {
     status: string;
@@ -18,6 +19,7 @@ interface HealthStatus {
 }
 
 const StatusView: React.FC = () => {
+    const { config } = useSystemConfig();
     const [minioStatus, setMinioStatus] = useState({ online: true, message: 'MinIO is running' });
     const [storageStats, setStorageStats] = useState({ used: 0, total: 0, files: 0 });
     const [healthStatus, setHealthStatus] = useState<HealthStatus | null>(null);
@@ -154,7 +156,7 @@ const StatusView: React.FC = () => {
                 {/* Header */}
                 <div className="mb-8">
                     <h1 className="text-3xl font-bold text-slate-800 mb-2">Status dos Serviços</h1>
-                    <p className="text-slate-600">Monitoramento em tempo real da infraestrutura do ApiRAGFS</p>
+                    <p className="text-slate-600">Monitoramento em tempo real da infraestrutura do {config.systemName}</p>
                 </div>
 
                 {/* Overall Status Banner */}

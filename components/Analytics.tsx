@@ -5,8 +5,10 @@
 
 import React, { useState, useEffect } from 'react';
 import { apiService, AnalyticsDashboard, AnalyticsStats } from '../services/apiService';
+import { useSystemConfig } from '../contexts/SystemConfigContext';
 
 const Analytics: React.FC = () => {
+    const { config } = useSystemConfig();
     const [dashboardData, setDashboardData] = useState<AnalyticsDashboard | null>(null);
     const [statsData, setStatsData] = useState<AnalyticsStats | null>(null);
     const [loading, setLoading] = useState(true);
@@ -89,7 +91,7 @@ const Analytics: React.FC = () => {
                 <div className="mb-8 flex items-center justify-between">
                     <div>
                         <h1 className="text-3xl font-bold text-slate-800 mb-2">Analytics</h1>
-                        <p className="text-slate-600">Métricas e estatísticas de uso do ApiRAGFS</p>
+                        <p className="text-slate-600">Métricas e estatísticas de uso do {config.systemName}</p>
                     </div>
                     <button
                         onClick={loadAnalytics}

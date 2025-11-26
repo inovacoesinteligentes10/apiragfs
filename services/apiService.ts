@@ -68,6 +68,28 @@ export interface SystemPromptUpdate {
     system_prompt: string;
 }
 
+export interface GeneralSettingsResponse {
+    language: string;
+    theme: string;
+    notifications: boolean;
+    auto_save: boolean;
+    system_name: string;
+    system_description: string;
+    system_logo: string;
+    is_admin: boolean;
+    updated_at: string;
+}
+
+export interface GeneralSettingsUpdate {
+    language?: 'pt-BR' | 'en-US' | 'es-ES';
+    theme?: 'light' | 'dark' | 'auto';
+    notifications?: boolean;
+    auto_save?: boolean;
+    system_name?: string;
+    system_description?: string;
+    system_logo?: string;
+}
+
 export interface RagStore {
     id: string;
     user_id: string;
@@ -564,6 +586,65 @@ class ApiService {
     }
 
     /**
+     * Buscar configurações gerais - Usa autenticação JWT
+     */
+    async getGeneralSettings(): Promise<GeneralSettingsResponse> {
+        const token = localStorage.getItem('access_token');
+        const response = await fetch(`${this.baseUrl}/api/v1/settings/general`, {
+            headers: {
+                'Authorization': `Bearer ${token}`,
+            },
+        });
+
+        if (!response.ok) {
+            throw new Error('Erro ao buscar configurações gerais');
+        }
+
+        return response.json();
+    }
+
+    /**
+     * Atualizar configurações gerais - Usa autenticação JWT
+     */
+    async updateGeneralSettings(settings: GeneralSettingsUpdate): Promise<GeneralSettingsResponse> {
+        const token = localStorage.getItem('access_token');
+        const response = await fetch(`${this.baseUrl}/api/v1/settings/general`, {
+            method: 'PUT',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`,
+            },
+            body: JSON.stringify(settings),
+        });
+
+        if (!response.ok) {
+            const error = await response.json();
+            throw new Error(error.detail || 'Erro ao atualizar configurações gerais');
+        }
+
+        return response.json();
+    }
+
+    /**
+     * Resetar configurações gerais para o padrão - Usa autenticação JWT
+     */
+    async resetGeneralSettings(): Promise<GeneralSettingsResponse> {
+        const token = localStorage.getItem('access_token');
+        const response = await fetch(`${this.baseUrl}/api/v1/settings/reset-general`, {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${token}`,
+            },
+        });
+
+        if (!response.ok) {
+            throw new Error('Erro ao resetar configurações gerais');
+        }
+
+        return response.json();
+    }
+
+    /**
      * Listar RAG Stores (Departments) - Agora usa autenticação JWT
      */
     async listRagStores(): Promise<import('../types').StoreWithPermissions[]> {
@@ -722,9 +803,13 @@ class ApiService {
     /**
      * Mover documento para outro store
      */
-    async moveDocumentToStore(documentId: string, targetStore: string, userId: string = 'default-user'): Promise<{ message: string; old_store: string; new_store: string }> {
-        const response = await fetch(`${this.baseUrl}/api/v1/documents/${documentId}/move-store?target_store=${targetStore}&user_id=${userId}`, {
+    async moveDocumentToStore(documentId: string, targetStore: string): Promise<{ message: string; old_store: string; new_store: string }> {
+        const token = localStorage.getItem('access_token');
+        const response = await fetch(`${this.baseUrl}/api/v1/documents/${documentId}/move-store?target_store=${targetStore}`, {
             method: 'PATCH',
+            headers: {
+                'Authorization': `Bearer ${token}`,
+            },
         });
 
         if (!response.ok) {

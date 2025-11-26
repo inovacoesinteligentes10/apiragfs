@@ -497,11 +497,13 @@ async def move_document_to_store(
     document_id: str,
     target_store: str,
     background_tasks: BackgroundTasks,
-    user_id: str = "default-user"
+    current_user: dict = Depends(get_current_user)
 ):
     """
     Move um documento para outro store (departamento)
     """
+    user_id = current_user['id']
+
     try:
         # Buscar documento
         document = await db.fetch_one(
@@ -584,6 +586,9 @@ async def move_document_to_store(
     except HTTPException:
         raise
     except Exception as e:
+        import traceback
+        print(f"ERRO ao mover documento: {str(e)}")
+        print(f"Traceback: {traceback.format_exc()}")
         raise HTTPException(status_code=500, detail=f"Erro ao mover documento: {str(e)}")
 
 

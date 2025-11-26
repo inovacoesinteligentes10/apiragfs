@@ -6,6 +6,7 @@
 import React, { useMemo } from 'react';
 import { RagStore } from '../services/apiService';
 import { ProcessedDocument } from '../types';
+import { useSystemConfig } from '../contexts/SystemConfigContext';
 
 interface DashboardProps {
     onNavigateToDocuments: () => void;
@@ -26,6 +27,8 @@ const Dashboard: React.FC<DashboardProps> = ({
     onNavigateToChat,
     onSelectStore
 }) => {
+    const { config } = useSystemConfig();
+
     // Calcular estatísticas
     const stats = useMemo(() => {
         const totalDocs = documents.length;
@@ -159,10 +162,10 @@ const Dashboard: React.FC<DashboardProps> = ({
             {/* Header */}
             <div className="mb-8">
                 <h1 className="text-4xl font-bold text-slate-800 mb-2">
-                    Bem-vindo ao ApiRAGFS
+                    Bem-vindo ao {config.systemName}
                 </h1>
                 <p className="text-lg text-slate-600">
-                    Sistema de RAG com Armazenamento em Filesystem e Google Gemini
+                    {config.systemDescription}
                 </p>
             </div>
 
@@ -477,10 +480,9 @@ const Dashboard: React.FC<DashboardProps> = ({
             {/* Info Cards */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div className="bg-gradient-to-br from-blue-500 to-purple-600 rounded-xl shadow-lg p-8 text-white">
-                    <h3 className="text-xl font-bold mb-3">Sobre o ApiRAGFS</h3>
+                    <h3 className="text-xl font-bold mb-3">Sobre o {config.systemName}</h3>
                     <p className="text-blue-100 mb-4">
-                        Sistema de Recuperação Aumentada por Geração (RAG) que permite fazer upload de documentos
-                        e conversar com eles usando Google Gemini AI para respostas precisas e contextualizadas.
+                        {config.systemDescription}
                     </p>
                     <div className="flex items-center space-x-2 text-sm">
                         <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">

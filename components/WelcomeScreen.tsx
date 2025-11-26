@@ -9,6 +9,7 @@ import UploadCloudIcon from './icons/UploadCloudIcon';
 import CarIcon from './icons/CarIcon';
 import WashingMachineIcon from './icons/WashingMachineIcon';
 import TrashIcon from './icons/TrashIcon';
+import { useSystemConfig } from '../contexts/SystemConfigContext';
 
 interface WelcomeScreenProps {
     onUpload: () => Promise<void>;
@@ -37,6 +38,7 @@ const sampleDocuments = [
 ];
 
 const WelcomeScreen: React.FC<WelcomeScreenProps> = ({ onUpload, apiKeyError, files, setFiles, isApiKeySelected, onSelectKey }) => {
+    const { config } = useSystemConfig();
     const [isDragging, setIsDragging] = useState(false);
     const [loadingSample, setLoadingSample] = useState<string | null>(null);
 
@@ -110,9 +112,12 @@ const WelcomeScreen: React.FC<WelcomeScreenProps> = ({ onUpload, apiKeyError, fi
     return (
         <div className="flex flex-col items-center justify-center min-h-screen p-4 sm:p-6 lg:p-8">
             <div className="w-full max-w-3xl text-center">
-                <h1 className="text-4xl sm:text-5xl font-bold mb-2">Chat With Your Document</h1>
+                <div className="flex items-center justify-center mb-4">
+                    <span className="text-6xl mr-4">{config.systemLogo}</span>
+                    <h1 className="text-4xl sm:text-5xl font-bold">{config.systemName}</h1>
+                </div>
                 <p className="text-gem-offwhite/70 mb-8">
-                    Powered by <strong className="font-semibold text-gem-offwhite">FileSearch</strong>. Upload a manual or select example to see RAG in action.
+                    {config.systemDescription}
                 </p>
 
                 <div className="w-full max-w-xl mx-auto mb-8">
