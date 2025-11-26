@@ -853,9 +853,11 @@ const AppContent: React.FC = () => {
                 (error: string) => {
                     console.error("❌ Erro ao enviar mensagem:", error);
 
-                    // Verificar se é erro de RAG store inválido/inexistente
+                    // Verificar se é erro de RAG store inválido/inexistente ou sessão não encontrada
                     const isRagStoreError = error.includes("RAG store não existe") ||
                                           error.includes("não está acessível") ||
+                                          error.includes("Sessão não encontrada") ||
+                                          error.includes("não encontrada") ||
                                           error.includes("INVALID_ARGUMENT") ||
                                           error.includes("PERMISSION_DENIED");
 
