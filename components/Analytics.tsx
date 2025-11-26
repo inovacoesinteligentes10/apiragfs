@@ -6,8 +6,6 @@
 import React, { useState, useEffect } from 'react';
 import { apiService, AnalyticsDashboard, AnalyticsStats } from '../services/apiService';
 
-const USER_ID = 'bfff76fd-e8ac-4792-aafa-1024862bf40f'; // TODO: Get from auth context
-
 const Analytics: React.FC = () => {
     const [dashboardData, setDashboardData] = useState<AnalyticsDashboard | null>(null);
     const [statsData, setStatsData] = useState<AnalyticsStats | null>(null);
@@ -24,8 +22,8 @@ const Analytics: React.FC = () => {
             setError(null);
 
             const [dashboard, stats] = await Promise.all([
-                apiService.getAnalyticsDashboard(USER_ID),
-                apiService.getAnalyticsStats(USER_ID)
+                apiService.getAnalyticsDashboard(),
+                apiService.getAnalyticsStats()
             ]);
 
             setDashboardData(dashboard);
