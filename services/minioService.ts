@@ -168,22 +168,25 @@ class MinioService {
     }
 
     /**
-     * Get storage stats
+     * Get storage stats - Busca dados reais do backend
      */
     async getStorageStats(): Promise<{ used: number; total: number; files: number }> {
         try {
-            const files = this.getFileMetadata();
-            const used = files.reduce((total, file) => total + file.size, 0);
-
+            const response = await fetch('http://localhost:8000/minio/stats');
+            if (!response.ok) {
+                throw new Error('Failed to fetch MinIO stats');
+            }
+            const data = await response.json();
             return {
-                used: used,
-                total: 10 * 1024 * 1024 * 1024, // 10 GB for demo
-                files: files.length
+                used: data.used || 0,
+                total: data.total || 100 * 1024 * 1024 * 1024,
+                files: data.files || 0
             };
         } catch (error) {
+            console.error('Error fetching MinIO stats:', error);
             return {
                 used: 0,
-                total: 0,
+                total: 100 * 1024 * 1024 * 1024,
                 files: 0
             };
         }

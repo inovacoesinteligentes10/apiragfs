@@ -81,6 +81,30 @@ class MinIOClient:
             print(f"Erro ao deletar arquivo: {e}")
             return False
 
+    def get_storage_stats(self):
+        """Retorna estatísticas de armazenamento do bucket"""
+        try:
+            objects = self.client.list_objects(bucket_name=self.bucket, recursive=True)
+            total_size = 0
+            file_count = 0
+
+            for obj in objects:
+                total_size += obj.size
+                file_count += 1
+
+            return {
+                "used": total_size,
+                "files": file_count,
+                "bucket": self.bucket
+            }
+        except Exception as e:
+            print(f"Erro ao obter estatísticas: {e}")
+            return {
+                "used": 0,
+                "files": 0,
+                "bucket": self.bucket
+            }
+
 
 # Instância global
 minio_client = MinIOClient()

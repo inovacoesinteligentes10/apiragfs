@@ -109,6 +109,27 @@ async def health_check():
     return health_status
 
 
+@app.get("/minio/stats")
+async def minio_stats():
+    """Retorna estatísticas de armazenamento do MinIO"""
+    try:
+        stats = minio_client.get_storage_stats()
+        return {
+            "used": stats["used"],
+            "files": stats["files"],
+            "bucket": stats["bucket"],
+            "total": 100 * 1024 * 1024 * 1024  # 100 GB total capacity
+        }
+    except Exception as e:
+        return {
+            "error": str(e),
+            "used": 0,
+            "files": 0,
+            "bucket": minio_client.bucket,
+            "total": 100 * 1024 * 1024 * 1024
+        }
+
+
 # Incluir routers da API v1
 # Não definir tags aqui - deixar os routers definirem suas próprias tags
 from .api.v1 import documents, chat, settings as settings_router, stores, analytics, auth, users
