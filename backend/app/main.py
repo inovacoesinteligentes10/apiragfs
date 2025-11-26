@@ -110,8 +110,9 @@ async def health_check():
 
 
 # Incluir routers da API v1
-from .api.v1 import documents, chat, settings as settings_router, stores
+from .api.v1 import documents, chat, settings as settings_router, stores, analytics
 app.include_router(documents.router, prefix=f"{settings.api_v1_prefix}/documents", tags=["documents"])
 app.include_router(chat.router, prefix=f"{settings.api_v1_prefix}/chat", tags=["chat"])
 app.include_router(settings_router.router, prefix=f"{settings.api_v1_prefix}/settings", tags=["settings"])
 app.include_router(stores.router, prefix=f"{settings.api_v1_prefix}/stores", tags=["stores"])
+app.include_router(analytics.router, prefix=f"{settings.api_v1_prefix}/analytics", tags=["analytics"])
