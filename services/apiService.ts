@@ -725,10 +725,16 @@ class ApiService {
     }
 
     /**
-     * Analytics - Dashboard metrics
+     * Analytics - Dashboard metrics - Usa autenticação JWT
+     * Admin vê métricas globais, usuários regulares veem apenas suas métricas
      */
-    async getAnalyticsDashboard(userId: string): Promise<AnalyticsDashboard> {
-        const response = await fetch(`${this.baseUrl}/api/v1/analytics/dashboard?user_id=${userId}`);
+    async getAnalyticsDashboard(): Promise<AnalyticsDashboard> {
+        const token = localStorage.getItem('access_token');
+        const response = await fetch(`${this.baseUrl}/api/v1/analytics/dashboard`, {
+            headers: {
+                'Authorization': `Bearer ${token}`,
+            },
+        });
 
         if (!response.ok) {
             throw new Error('Erro ao buscar métricas do dashboard');
@@ -738,10 +744,16 @@ class ApiService {
     }
 
     /**
-     * Analytics - General stats
+     * Analytics - General stats - Usa autenticação JWT
+     * Admin vê estatísticas globais, usuários regulares veem apenas suas estatísticas
      */
-    async getAnalyticsStats(userId: string): Promise<AnalyticsStats> {
-        const response = await fetch(`${this.baseUrl}/api/v1/analytics/stats?user_id=${userId}`);
+    async getAnalyticsStats(): Promise<AnalyticsStats> {
+        const token = localStorage.getItem('access_token');
+        const response = await fetch(`${this.baseUrl}/api/v1/analytics/stats`, {
+            headers: {
+                'Authorization': `Bearer ${token}`,
+            },
+        });
 
         if (!response.ok) {
             throw new Error('Erro ao buscar estatísticas');
