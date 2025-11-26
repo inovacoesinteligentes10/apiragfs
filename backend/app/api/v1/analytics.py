@@ -9,7 +9,7 @@ import json
 from ...config.database import db
 from ...config.redis import redis_client
 
-router = APIRouter()
+router = APIRouter(tags=["Analytics"])
 
 
 @router.get("/dashboard")

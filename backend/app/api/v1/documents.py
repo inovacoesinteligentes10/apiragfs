@@ -15,7 +15,7 @@ from ...config.redis import redis_client
 from ...schemas.document import DocumentCreate, DocumentResponse, DocumentStatus
 from ...services.gemini_service import GeminiService
 
-router = APIRouter()
+router = APIRouter(tags=["Documents"])
 
 
 @router.post("/reprocess-documents")

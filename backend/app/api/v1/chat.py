@@ -18,7 +18,7 @@ from ...schemas.chat import (
 )
 from ...services.gemini_service import GeminiService
 
-router = APIRouter()
+router = APIRouter(tags=["Chat"])
 
 
 @router.post("/sessions", response_model=ChatSessionResponse)

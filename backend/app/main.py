@@ -110,11 +110,12 @@ async def health_check():
 
 
 # Incluir routers da API v1
+# Não definir tags aqui - deixar os routers definirem suas próprias tags
 from .api.v1 import documents, chat, settings as settings_router, stores, analytics, auth, users
-app.include_router(auth.router, prefix=f"{settings.api_v1_prefix}", tags=["authentication"])
-app.include_router(users.router, prefix=f"{settings.api_v1_prefix}", tags=["user-management"])
-app.include_router(documents.router, prefix=f"{settings.api_v1_prefix}/documents", tags=["documents"])
-app.include_router(chat.router, prefix=f"{settings.api_v1_prefix}/chat", tags=["chat"])
-app.include_router(settings_router.router, prefix=f"{settings.api_v1_prefix}/settings", tags=["settings"])
-app.include_router(stores.router, prefix=f"{settings.api_v1_prefix}/stores", tags=["stores"])
-app.include_router(analytics.router, prefix=f"{settings.api_v1_prefix}/analytics", tags=["analytics"])
+app.include_router(auth.router, prefix=f"{settings.api_v1_prefix}")
+app.include_router(users.router, prefix=f"{settings.api_v1_prefix}")
+app.include_router(documents.router, prefix=f"{settings.api_v1_prefix}/documents")
+app.include_router(chat.router, prefix=f"{settings.api_v1_prefix}/chat")
+app.include_router(settings_router.router, prefix=f"{settings.api_v1_prefix}/settings")
+app.include_router(stores.router, prefix=f"{settings.api_v1_prefix}/stores")
+app.include_router(analytics.router, prefix=f"{settings.api_v1_prefix}/analytics")

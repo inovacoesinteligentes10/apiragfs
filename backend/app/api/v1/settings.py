@@ -12,7 +12,7 @@ from ...schemas.settings import (
     SystemPromptUpdate, SystemPromptResponse
 )
 
-router = APIRouter()
+router = APIRouter(tags=["Settings"])
 
 
 @router.get("/system-prompt", response_model=SystemPromptResponse)

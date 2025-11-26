@@ -25,7 +25,7 @@ from ...middleware.auth import (
     remove_store_permission
 )
 
-router = APIRouter()
+router = APIRouter(tags=["Stores"])
 
 
 @router.get("/", response_model=List[StoreWithPermissions])
