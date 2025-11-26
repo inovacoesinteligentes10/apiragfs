@@ -60,11 +60,11 @@ const StatusView: React.FC = () => {
         },
         {
             name: 'Analytics Engine',
-            status: 'degraded',
-            uptime: '97.2%',
-            latency: '450ms',
-            lastCheck: '5 min atrás',
-            description: 'Motor de análise e métricas'
+            status: 'operational',
+            uptime: '99.95%',
+            latency: '85ms',
+            lastCheck: 'Agora',
+            description: 'Motor de análise e métricas com autenticação JWT'
         }
     ];
 
