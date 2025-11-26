@@ -537,10 +537,15 @@ class ApiService {
     }
 
     /**
-     * Listar RAG Stores (Departments)
+     * Listar RAG Stores (Departments) - Agora usa autenticação JWT
      */
-    async listRagStores(userId: string = 'default-user'): Promise<RagStore[]> {
-        const response = await fetch(`${this.baseUrl}/api/v1/stores/?user_id=${userId}`);
+    async listRagStores(): Promise<import('../types').StoreWithPermissions[]> {
+        const token = localStorage.getItem('access_token');
+        const response = await fetch(`${this.baseUrl}/api/v1/stores/`, {
+            headers: {
+                'Authorization': `Bearer ${token}`,
+            },
+        });
 
         if (!response.ok) {
             throw new Error('Erro ao listar stores');
@@ -550,10 +555,15 @@ class ApiService {
     }
 
     /**
-     * Buscar RAG Store por nome
+     * Buscar RAG Store por ID - Agora usa autenticação JWT
      */
-    async getRagStore(storeName: string, userId: string = 'default-user'): Promise<RagStore> {
-        const response = await fetch(`${this.baseUrl}/api/v1/stores/${storeName}?user_id=${userId}`);
+    async getRagStore(storeId: string): Promise<import('../types').StoreWithPermissions> {
+        const token = localStorage.getItem('access_token');
+        const response = await fetch(`${this.baseUrl}/api/v1/stores/${storeId}`, {
+            headers: {
+                'Authorization': `Bearer ${token}`,
+            },
+        });
 
         if (!response.ok) {
             throw new Error('Store não encontrado');
@@ -563,13 +573,15 @@ class ApiService {
     }
 
     /**
-     * Criar novo RAG Store
+     * Criar novo RAG Store - Agora usa autenticação JWT
      */
-    async createRagStore(storeData: RagStoreCreate, userId: string = 'default-user'): Promise<RagStore> {
-        const response = await fetch(`${this.baseUrl}/api/v1/stores/?user_id=${userId}`, {
+    async createRagStore(storeData: RagStoreCreate): Promise<RagStore> {
+        const token = localStorage.getItem('access_token');
+        const response = await fetch(`${this.baseUrl}/api/v1/stores/`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`,
             },
             body: JSON.stringify(storeData),
         });
@@ -583,13 +595,15 @@ class ApiService {
     }
 
     /**
-     * Atualizar RAG Store
+     * Atualizar RAG Store - Agora usa autenticação JWT e ID ao invés de nome
      */
-    async updateRagStore(storeName: string, storeData: RagStoreCreate, userId: string = 'default-user'): Promise<RagStore> {
-        const response = await fetch(`${this.baseUrl}/api/v1/stores/${storeName}?user_id=${userId}`, {
+    async updateRagStore(storeId: string, storeData: RagStoreCreate): Promise<RagStore> {
+        const token = localStorage.getItem('access_token');
+        const response = await fetch(`${this.baseUrl}/api/v1/stores/${storeId}`, {
             method: 'PUT',
             headers: {
                 'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`,
             },
             body: JSON.stringify(storeData),
         });
@@ -603,16 +617,78 @@ class ApiService {
     }
 
     /**
-     * Deletar RAG Store
+     * Deletar RAG Store - Agora usa autenticação JWT e ID ao invés de nome
      */
-    async deleteRagStore(storeName: string, userId: string = 'default-user'): Promise<void> {
-        const response = await fetch(`${this.baseUrl}/api/v1/stores/${storeName}?user_id=${userId}`, {
+    async deleteRagStore(storeId: string): Promise<void> {
+        const token = localStorage.getItem('access_token');
+        const response = await fetch(`${this.baseUrl}/api/v1/stores/${storeId}`, {
             method: 'DELETE',
+            headers: {
+                'Authorization': `Bearer ${token}`,
+            },
         });
 
         if (!response.ok) {
             const error = await response.json();
             throw new Error(error.detail || 'Erro ao deletar store');
+        }
+    }
+
+    // ===== Store Permissions Methods =====
+
+    /**
+     * Listar permissões de um store
+     */
+    async getStorePermissions(storeId: string): Promise<import('../types').StorePermission[]> {
+        const token = localStorage.getItem('access_token');
+        const response = await fetch(`${this.baseUrl}/api/v1/stores/${storeId}/permissions`, {
+            headers: {
+                'Authorization': `Bearer ${token}`,
+            },
+        });
+
+        if (!response.ok) {
+            throw new Error('Erro ao listar permissões do store');
+        }
+
+        return response.json();
+    }
+
+    /**
+     * Adicionar permissão de usuário a um store
+     */
+    async addStorePermission(storeId: string, userId: string): Promise<void> {
+        const token = localStorage.getItem('access_token');
+        const response = await fetch(`${this.baseUrl}/api/v1/stores/${storeId}/permissions`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`,
+            },
+            body: JSON.stringify({ user_id: userId }),
+        });
+
+        if (!response.ok) {
+            const error = await response.json();
+            throw new Error(error.detail || 'Erro ao adicionar permissão');
+        }
+    }
+
+    /**
+     * Remover permissão de usuário de um store
+     */
+    async removeStorePermission(storeId: string, userId: string): Promise<void> {
+        const token = localStorage.getItem('access_token');
+        const response = await fetch(`${this.baseUrl}/api/v1/stores/${storeId}/permissions/${userId}`, {
+            method: 'DELETE',
+            headers: {
+                'Authorization': `Bearer ${token}`,
+            },
+        });
+
+        if (!response.ok) {
+            const error = await response.json();
+            throw new Error(error.detail || 'Erro ao remover permissão');
         }
     }
 

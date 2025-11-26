@@ -44,3 +44,39 @@ class StoreResponse(StoreBase):
 class StoreWithRagName(StoreResponse):
     """Schema de store com RAG store name do Gemini"""
     rag_store_name: Optional[str] = None
+
+
+# ===== Schemas para Permissões de Store =====
+
+class StorePermissionCreate(BaseModel):
+    """Schema para criar permissão de acesso a store"""
+    user_id: str = Field(..., description="ID do usuário que receberá acesso")
+
+
+class StorePermissionResponse(BaseModel):
+    """Schema de resposta para permissão de store"""
+    id: str
+    user_id: str
+    store_id: str
+    user_name: str
+    user_email: str
+    user_role: str
+    created_at: datetime
+    created_by: Optional[str] = None
+
+    @field_validator('id', 'user_id', 'store_id', mode='before')
+    @classmethod
+    def convert_uuid_to_str(cls, v):
+        """Converter UUID para string"""
+        if isinstance(v, UUID):
+            return str(v)
+        return v
+
+    class Config:
+        from_attributes = True
+
+
+class StoreWithPermissions(StoreWithRagName):
+    """Schema de store com informações de permissões do usuário atual"""
+    is_creator: bool = Field(default=False, description="Se o usuário atual é o criador do store")
+    can_manage: bool = Field(default=False, description="Se o usuário pode gerenciar permissões")

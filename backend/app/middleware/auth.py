@@ -167,3 +167,146 @@ optional_auth = OptionalAuth()
 
 # Alias para facilitar uso
 require_admin = get_current_admin_user
+
+
+# ===== Helper Functions para Store Permissions =====
+
+async def has_store_access(user_id: str, store_id: str, role: str) -> bool:
+    """
+    Verifica se um usuário tem acesso a um store específico
+
+    Args:
+        user_id: ID do usuário
+        store_id: ID do store
+        role: Role do usuário
+
+    Returns:
+        True se tem acesso, False caso contrário
+    """
+    # Admin sempre tem acesso a todos os stores
+    if role == 'admin':
+        return True
+
+    # Verificar se tem permissão na tabela
+    permission = await db.fetch_one(
+        """
+        SELECT 1 FROM user_store_permissions
+        WHERE user_id = $1 AND store_id = $2
+        """,
+        user_id, store_id
+    )
+
+    return permission is not None
+
+
+async def can_manage_store(user_id: str, store_id: str, role: str) -> bool:
+    """
+    Verifica se um usuário pode gerenciar um store (modificar permissões)
+
+    Args:
+        user_id: ID do usuário
+        store_id: ID do store
+        role: Role do usuário
+
+    Returns:
+        True se pode gerenciar, False caso contrário
+    """
+    # Admin sempre pode gerenciar
+    if role == 'admin':
+        return True
+
+    # Verificar se é o criador do store
+    store = await db.fetch_one(
+        """
+        SELECT user_id FROM rag_stores
+        WHERE id = $1
+        """,
+        store_id
+    )
+
+    if store and str(store['user_id']) == user_id:
+        return True
+
+    return False
+
+
+async def get_user_stores(user_id: str, role: str) -> list:
+    """
+    Retorna lista de IDs de stores aos quais o usuário tem acesso
+
+    Args:
+        user_id: ID do usuário
+        role: Role do usuário
+
+    Returns:
+        Lista de UUIDs de stores
+    """
+    # Admin tem acesso a todos
+    if role == 'admin':
+        stores = await db.fetch_all("SELECT id FROM rag_stores")
+        return [str(s['id']) for s in stores]
+
+    # Buscar stores com permissão
+    permissions = await db.fetch_all(
+        """
+        SELECT store_id FROM user_store_permissions
+        WHERE user_id = $1
+        """,
+        user_id
+    )
+
+    return [str(p['store_id']) for p in permissions]
+
+
+async def add_store_permission(store_id: str, user_id: str, created_by: str) -> None:
+    """
+    Adiciona permissão de acesso a um store para um usuário
+
+    Args:
+        store_id: ID do store
+        user_id: ID do usuário que receberá acesso
+        created_by: ID do usuário que está criando a permissão
+    """
+    await db.execute(
+        """
+        INSERT INTO user_store_permissions (user_id, store_id, created_by)
+        VALUES ($1, $2, $3)
+        ON CONFLICT (user_id, store_id) DO NOTHING
+        """,
+        user_id, store_id, created_by
+    )
+
+
+async def remove_store_permission(store_id: str, user_id: str) -> bool:
+    """
+    Remove permissão de acesso a um store
+
+    Args:
+        store_id: ID do store
+        user_id: ID do usuário que perderá acesso
+
+    Returns:
+        True se removeu, False se não encontrou ou não pode remover
+
+    Raises:
+        ValueError: Se tentar remover permissão do criador do store
+    """
+    # Verificar se é o criador
+    store = await db.fetch_one(
+        "SELECT user_id FROM rag_stores WHERE id = $1",
+        store_id
+    )
+
+    if store and str(store['user_id']) == user_id:
+        raise ValueError("Não é possível remover permissão do criador do store")
+
+    # Remover permissão
+    result = await db.execute(
+        """
+        DELETE FROM user_store_permissions
+        WHERE user_id = $1 AND store_id = $2
+        """,
+        user_id, store_id
+    )
+
+    return result != "DELETE 0"

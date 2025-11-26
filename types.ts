@@ -88,3 +88,32 @@ export interface UserFormData {
     password?: string;
     is_active?: boolean;
 }
+
+// ===== Store Permissions Types =====
+
+export interface StorePermission {
+    id: string;
+    user_id: string;
+    store_id: string;
+    user_name: string;
+    user_email: string;
+    user_role: 'student' | 'professor' | 'admin';
+    created_at: string;
+    created_by?: string;
+}
+
+export interface StoreWithPermissions {
+    id: string;
+    user_id: string;
+    name: string;
+    display_name: string;
+    description?: string;
+    icon: string;
+    color: string;
+    document_count: number;
+    rag_store_name?: string;
+    created_at: string;
+    updated_at: string;
+    is_creator: boolean;
+    can_manage: boolean;
+}
