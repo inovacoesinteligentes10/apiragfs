@@ -122,10 +122,9 @@ const Settings: React.FC = () => {
                 ...prev,
                 systemPrompt: response.system_prompt
             }));
-            alert('System prompt restaurado com sucesso!');
+            // Mensagem de sucesso será exibida via toast no handleSave
         } catch (error) {
             console.error('Erro ao resetar system prompt:', error);
-            alert('Erro ao restaurar configurações padrão');
         } finally {
             setLoading(false);
         }
@@ -172,13 +171,16 @@ const Settings: React.FC = () => {
                 systemDescription: response.system_description,
                 systemLogo: response.system_logo
             }));
-            alert('Configurações gerais restauradas com sucesso!');
 
             // Atualizar contexto global
             await refreshConfig();
+
+            setGeneralSettingsSaveStatus('success');
+            setTimeout(() => setGeneralSettingsSaveStatus('idle'), 3000);
         } catch (error) {
             console.error('Erro ao resetar configurações gerais:', error);
-            alert('Erro ao restaurar configurações padrão');
+            setGeneralSettingsSaveStatus('error');
+            setTimeout(() => setGeneralSettingsSaveStatus('idle'), 3000);
         }
     };
 

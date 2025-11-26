@@ -362,7 +362,7 @@ const AppContent: React.FC = () => {
             }
         } else {
             console.log('Running in local environment. API key should be configured in .env.local');
-            alert('Running in local mode. Please configure your GEMINI_API_KEY in the .env.local file.');
+            showInfo('Modo local: Configure sua GEMINI_API_KEY no arquivo .env.local');
         }
     };
 
@@ -593,7 +593,7 @@ const AppContent: React.FC = () => {
             }
         } catch (err) {
             console.error('Erro ao mover documento:', err);
-            alert('Erro ao mover documento. Por favor, tente novamente.');
+            showError('Erro ao mover documento. Por favor, tente novamente.');
         }
     };
 
@@ -628,7 +628,7 @@ const AppContent: React.FC = () => {
     const handleStartChatWithStore = async (store: RagStore) => {
         // Verificar se o store tem documentos
         if (!store.rag_store_name || store.document_count === 0) {
-            alert('Este store ainda não possui documentos. Faça upload de documentos antes de iniciar o chat.');
+            showWarning('Este store ainda não possui documentos. Faça upload de documentos antes de iniciar o chat.');
             setCurrentView('documents');
             return;
         }
@@ -680,7 +680,7 @@ const AppContent: React.FC = () => {
         } catch (err) {
             console.error('❌ Erro ao iniciar chat:', err);
             const errorMessage = err instanceof Error ? err.message : String(err);
-            alert(`Erro ao iniciar chat: ${errorMessage}`);
+            showError(`Erro ao iniciar chat: ${errorMessage}`);
             setStatus(AppStatus.Welcome);
         } finally {
             setUploadProgress(null);
@@ -702,7 +702,7 @@ const AppContent: React.FC = () => {
             console.log('📄 Documentos completados:', completedDocs);
 
             if (completedDocs.length === 0) {
-                alert('Nenhum documento disponível para chat. Faça upload de documentos primeiro.');
+                showWarning('Nenhum documento disponível para chat. Faça upload de documentos primeiro.');
                 return;
             }
 
@@ -767,7 +767,7 @@ const AppContent: React.FC = () => {
             console.error('Stack trace:', err instanceof Error ? err.stack : 'N/A');
 
             const errorMessage = err instanceof Error ? err.message : String(err);
-            alert(`Erro ao iniciar chat: ${errorMessage}\n\nVerifique o console do navegador para mais detalhes.`);
+            showError(`Erro ao iniciar chat: ${errorMessage}. Verifique o console para mais detalhes.`);
             setStatus(AppStatus.Welcome);
         } finally {
             setUploadProgress(null);
@@ -878,10 +878,12 @@ const AppContent: React.FC = () => {
                         setStatus(AppStatus.Welcome);
                         setCurrentView('dashboard');
 
-                        // Mostrar mensagem informativa apenas uma vez
-                        setTimeout(() => {
-                            alert("Esta sessão de chat não está mais disponível porque os documentos foram removidos. Por favor, faça upload de novos documentos para começar uma nova sessão.");
-                        }, 100);
+                        // Mostrar mensagem informativa com toast
+                        showWarning(
+                            'Conversa não disponível: os documentos foram removidos. ' +
+                            'Faça upload de novos documentos para iniciar uma nova sessão.',
+                            { duration: 6000 }
+                        );
                     } else {
                         // Erro genérico
                         setChatHistory(prev => {
