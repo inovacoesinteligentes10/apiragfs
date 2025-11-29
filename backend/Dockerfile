@@ -7,7 +7,7 @@ WORKDIR /app
 COPY pyproject.toml ./
 
 # Instalar dependências usando UV
-RUN uv pip install --system '.[dev]'
+RUN uv pip install --system -r pyproject.toml
 
 # Stage de produção
 FROM python:3.12-slim-bookworm

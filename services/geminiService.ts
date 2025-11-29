@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
 */
 import { GoogleGenAI, GenerateContentResponse, Type } from "@google/genai";
-import { Document, QueryResult, CustomMetadata } from '../types';
+import { RagStore, Document, QueryResult, CustomMetadata } from '../types';
 
 let ai: GoogleGenAI;
 
