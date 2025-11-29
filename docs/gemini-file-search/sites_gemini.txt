@@ -1,0 +1,8 @@
+Gemini API:
+https://ai.google.dev/gemini-api/docs/file-search?hl=pt-br
+
+Matéria Blog google:
+https://blog.google/technology/developers/file-search-gemini-api/
+
+App para subir arquivos
+https://aistudio.google.com/apps/bundled/ask_the_manual
