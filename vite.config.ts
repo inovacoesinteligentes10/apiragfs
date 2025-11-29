@@ -5,11 +5,10 @@ import path from "path";
 export default defineConfig(({ mode }) => {
     const env = loadEnv(mode, '.', '');
     return {
-      server: {
-        port: 3001,
-        strictPort: true, // Força a porta 3001, não tenta outras portas
-        host: '0.0.0.0',
-      },
+  server: {
+    port: 8080,
+    host: '0.0.0.0',
+  },
       plugins: [react()],
       define: {
         'process.env.API_KEY': JSON.stringify(env.GEMINI_API_KEY),
