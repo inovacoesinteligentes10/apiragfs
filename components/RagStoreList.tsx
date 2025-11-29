@@ -3,19 +3,19 @@
  * SPDX-License-Identifier: Apache-2.0
 */
 import React, { useState } from 'react';
-import { RagStore } from '../types';
 import Spinner from './Spinner';
 import PlusIcon from './icons/PlusIcon';
 import TrashIcon from './icons/TrashIcon';
 import RefreshIcon from './icons/RefreshIcon';
+import { RAGStoreResponse, RAGStoreCreate } from '../services/apiService';
 
 interface RagStoreListProps {
-    stores: RagStore[];
-    selectedStore: RagStore | null;
+    stores: RAGStoreResponse[];
+    selectedStore: RAGStoreResponse | null;
     isLoading: boolean;
-    onCreate: (displayName: string) => void;
-    onSelect: (store: RagStore) => void;
-    onDelete: (storeName: string) => void;
+    onCreate: (data: RAGStoreCreate) => void;
+    onSelect: (store: RAGStoreResponse) => void;
+    onDelete: (ragStoreId: string) => void;
     onRefresh: () => void;
 }
 
@@ -35,7 +35,7 @@ const RagStoreList: React.FC<RagStoreListProps> = ({ stores, selectedStore, isLo
     const handleConfirmCreate = (e: React.FormEvent) => {
         e.preventDefault();
         if (newStoreName.trim()) {
-            onCreate(newStoreName.trim());
+            onCreate({ display_name: newStoreName.trim() });
             handleModalClose();
         }
     };
@@ -116,23 +116,23 @@ const RagStoreList: React.FC<RagStoreListProps> = ({ stores, selectedStore, isLo
             ) : (
                 <ul className="space-y-2 overflow-y-auto">
                     {stores.map((store) => (
-                        <li key={store.name} className="flex items-center justify-between group">
+                        <li key={store.id} className="flex items-center justify-between group">
                             <button
                                 onClick={() => onSelect(store)}
                                 className={`w-full text-left p-3 rounded-md transition-colors text-lg ${
-                                    selectedStore?.name === store.name
+                                    selectedStore?.id === store.id
                                         ? 'bg-gem-blue text-white'
                                         : 'bg-gem-mist hover:bg-gem-mist/70'
                                 }`}
-                                title={`Select ${store.displayName} to view its documents`}
+                                title={`Select ${store.display_name} to view its documents`}
                             >
-                                {store.displayName}
+                                {store.display_name}
                             </button>
-                            <button 
-                                onClick={(e) => { e.stopPropagation(); onDelete(store.name); }}
+                            <button
+                                onClick={(e) => { e.stopPropagation(); onDelete(store.id); }}
                                 className="ml-2 p-2 text-red-400 hover:text-red-300 rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
-                                aria-label={`Delete ${store.displayName}`}
-                                title={`Delete ${store.displayName}`}
+                                aria-label={`Delete ${store.display_name}`}
+                                title={`Delete ${store.display_name}`}
                             >
                                <TrashIcon />
                             </button>

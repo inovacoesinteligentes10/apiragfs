@@ -6,7 +6,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { AppStatus, ChatMessage, ProcessedDocument } from './types';
 import * as geminiService from './services/geminiService';
-import { apiService } from './services/apiService';
+import { apiService, RAGStoreResponse, RAGStoreCreate } from './services/apiService';
 import Spinner from './components/Spinner';
 import Sidebar from './components/Sidebar';
 import Dashboard from './components/Dashboard';
@@ -31,13 +31,15 @@ declare global {
 }
 
 const App: React.FC = () => {
-    const [currentView, setCurrentView] = useState<'dashboard' | 'documents' | 'chat' | 'analytics' | 'status' | 'settings'>('dashboard');
+    const [currentView, setCurrentView] = useState<'dashboard' | 'documents' | 'chat' | 'analytics' | 'status' | 'settings' | 'rag_stores'>('dashboard');
     const [status, setStatus] = useState<AppStatus>(AppStatus.Welcome);
     const [isApiKeySelected, setIsApiKeySelected] = useState(false);
     const [apiKeyError, setApiKeyError] = useState<string | null>(null);
     const [error, setError] = useState<string | null>(null);
     const [uploadProgress, setUploadProgress] = useState<{ current: number, total: number, message?: string, fileName?: string } | null>(null);
-    const [activeRagStoreName, setActiveRagStoreName] = useState<string | null>(null);
+    const [activeRagStoreName, setActiveRagStoreName] = useState<string | null>(null); // This is actually the session ID
+    const [ragStores, setRagStores] = useState<RAGStoreResponse[]>([]);
+    const [selectedRagStore, setSelectedRagStore] = useState<RAGStoreResponse | null>(null);
     const [chatHistory, setChatHistory] = useState<ChatMessage[]>([]);
     const [isQueryLoading, setIsQueryLoading] = useState(false);
     const [exampleQuestions, setExampleQuestions] = useState<string[]>([]);
@@ -115,31 +117,78 @@ const App: React.FC = () => {
         setStatus(AppStatus.Welcome);
     }
 
+    const fetchRagStores = useCallback(async () => {
+        try {
+            const stores = await apiService.listRAGStores();
+            setRagStores(stores);
+            if (stores.length > 0 && !selectedRagStore) {
+                setSelectedRagStore(stores[0]); // Seleciona o primeiro por padrão
+            }
+        } catch (err) {
+            handleError("Erro ao carregar RAG Stores", err);
+        }
+    }, [selectedRagStore]);
+
+    const handleCreateRagStore = async (data: RAGStoreCreate) => {
+        try {
+            const newStore = await apiService.createRAGStore(data);
+            setRagStores(prev => [...prev, newStore]);
+            setSelectedRagStore(newStore); // Seleciona o novo RAG Store
+            setCurrentView('documents'); // Redireciona para documentos após criar
+        } catch (err) {
+            handleError("Erro ao criar RAG Store", err);
+        }
+    };
+
+    const handleDeleteRagStore = async (ragStoreId: string) => {
+        try {
+            await apiService.deleteRAGStore(ragStoreId);
+            setRagStores(prev => prev.filter(store => store.id !== ragStoreId));
+            if (selectedRagStore?.id === ragStoreId) {
+                setSelectedRagStore(null); // Deseleciona se o store ativo foi deletado
+            }
+        } catch (err) {
+            handleError("Erro ao deletar RAG Store", err);
+        }
+    };
+
+    const handleSelectRagStore = (store: RAGStoreResponse) => {
+        setSelectedRagStore(store);
+        setCurrentView('documents'); // Redireciona para documentos ao selecionar
+    };
+
     useEffect(() => {
         checkApiKey();
-    }, [checkApiKey]);
+        fetchRagStores(); // Fetch RAG stores on component mount
+    }, [checkApiKey, fetchRagStores]);
 
     // Carregar documentos existentes ao iniciar
     useEffect(() => {
         const loadDocuments = async () => {
+            if (!selectedRagStore) {
+                setProcessedDocuments([]);
+                return;
+            }
             try {
-                const docs = await apiService.listDocuments();
-                const processedDocs: ProcessedDocument[] = docs.map(doc => ({
-                    id: doc.id,
-                    name: doc.name,
-                    type: doc.type,
-                    size: doc.size,
-                    textLength: doc.text_length,
-                    extractionMethod: doc.extraction_method,
-                    chunks: doc.chunks,
-                    processingTime: doc.processing_time,
-                    status: doc.status,
-                    progressPercent: doc.progress_percent,
-                    statusMessage: doc.status_message,
-                    ragStoreName: doc.rag_store_name,
-                    uploadDate: new Date(doc.upload_date),
-                    error: doc.error_message || undefined
-                }));
+                const docs = await apiService.listDocuments(); // TODO: Filtrar por RAG Store
+                const processedDocs: ProcessedDocument[] = docs
+                    .filter(doc => doc.rag_store_name === selectedRagStore.rag_store_name) // Filter by selected RAG Store
+                    .map(doc => ({
+                        id: doc.id,
+                        name: doc.name,
+                        type: doc.type,
+                        size: doc.size,
+                        textLength: doc.text_length,
+                        extractionMethod: doc.extraction_method,
+                        chunks: doc.chunks,
+                        processingTime: doc.processing_time,
+                        status: doc.status,
+                        progressPercent: doc.progress_percent,
+                        statusMessage: doc.status_message,
+                        ragStoreName: doc.rag_store_name,
+                        uploadDate: new Date(doc.upload_date),
+                        error: doc.error_message || undefined
+                    }));
                 setProcessedDocuments(processedDocs);
             } catch (err) {
                 console.error('Erro ao carregar documentos:', err);
@@ -147,7 +196,7 @@ const App: React.FC = () => {
         };
 
         loadDocuments();
-    }, []);
+    }, [selectedRagStore]); // Reload documents when selectedRagStore changes
 
     // Polling para atualizar status de documentos em processamento
     useEffect(() => {
@@ -211,13 +260,14 @@ const App: React.FC = () => {
             // Só iniciar automaticamente se:
             // 1. Estiver na view de chat
             // 2. Não houver sessão ativa (status não é Chatting)
-            // 3. Houver documentos completados
+            // 3. Houver documentos completados E um RAG Store selecionado
             // 4. Não estiver fazendo upload ou com erro
             if (
                 currentView === 'chat' &&
                 status !== AppStatus.Chatting &&
                 status !== AppStatus.Uploading &&
                 status !== AppStatus.Error &&
+                selectedRagStore &&
                 processedDocuments.some(doc => doc.status === 'completed')
             ) {
                 await handleStartChat();
@@ -225,7 +275,7 @@ const App: React.FC = () => {
         };
 
         autoStartChat();
-    }, [currentView, status]); // Executar quando mudar a view ou status
+    }, [currentView, status, selectedRagStore, processedDocuments]); // Executar quando mudar a view, status, selectedRagStore ou processedDocuments
 
     const handleSelectKey = async () => {
         if (window.aistudio?.openSelectKey) {
@@ -243,6 +293,10 @@ const App: React.FC = () => {
 
     const handleUploadAndStartChat = async () => {
         if (files.length === 0) return;
+        if (!selectedRagStore) {
+            alert('Por favor, selecione ou crie um RAG Store antes de fazer upload.');
+            return;
+        }
 
         setStatus(AppStatus.Uploading);
         const totalSteps = files.length;
@@ -262,7 +316,7 @@ const App: React.FC = () => {
 
                 try {
                     // Upload via API backend
-                    const uploadedDoc = await apiService.uploadDocument(file);
+                    const uploadedDoc = await apiService.uploadDocument(file); // TODO: Pass selectedRAGStore.rag_store_name to upload
 
                     // Criar documento processado para exibição
                     const doc: ProcessedDocument = {
@@ -329,37 +383,29 @@ const App: React.FC = () => {
     };
 
     const handleStartChat = async () => {
+        if (!selectedRagStore) {
+            alert('Por favor, selecione um RAG Store antes de iniciar o chat.');
+            return;
+        }
+
         try {
             console.log('🚀 Iniciando chat...');
 
-            // Verificar se há documentos completados
-            const completedDocs = processedDocuments.filter(doc => doc.status === 'completed');
-            console.log('📄 Documentos completados:', completedDocs);
+            // Verificar se há documentos completados no RAG Store selecionado
+            const completedDocsInSelectedStore = processedDocuments.filter(
+                doc => doc.status === 'completed' && doc.rag_store_name === selectedRagStore.rag_store_name
+            );
 
-            if (completedDocs.length === 0) {
-                alert('Nenhum documento disponível para chat. Faça upload de documentos primeiro.');
+            if (completedDocsInSelectedStore.length === 0) {
+                alert(`Nenhum documento completo no RAG Store '${selectedRagStore.display_name}'. Faça upload de documentos primeiro.`);
                 return;
             }
 
             setStatus(AppStatus.Uploading);
             setUploadProgress({ current: 0, total: 3, message: "Criando sessão de chat..." });
 
-            // Buscar o RAG store global do primeiro documento (todos documentos usam o mesmo RAG store global)
-            const firstDoc = completedDocs[0];
-            console.log('📌 Primeiro documento:', firstDoc);
-
-            const fullDocument = await apiService.getDocument(firstDoc.id);
-            console.log('📦 Documento completo do backend:', fullDocument);
-
-            if (!fullDocument.rag_store_name) {
-                console.error('❌ Documento não possui RAG Store:', fullDocument);
-                throw new Error("Documento não possui RAG Store. Faça upload novamente.");
-            }
-
-            console.log('🏪 RAG Store Name:', fullDocument.rag_store_name);
-
-            // Criar sessão de chat no backend (sem vincular a documento específico)
-            const session = await apiService.createChatSession(fullDocument.rag_store_name);
+            // Criar sessão de chat no backend usando o rag_store_name do selectedRagStore
+            const session = await apiService.createChatSession(selectedRagStore.rag_store_name);
             console.log('✅ Sessão criada:', session);
 
             setUploadProgress({ current: 1, total: 3, message: "Carregando histórico..." });
@@ -557,7 +603,7 @@ const App: React.FC = () => {
             case 'dashboard':
                 return <Dashboard
                     onNavigateToDocuments={() => setCurrentView('documents')}
-                    hasDocuments={!!activeRagStoreName}
+                    hasDocuments={!!selectedRagStore}
                 />;
             case 'documents':
                 return <DocumentsView
@@ -570,7 +616,20 @@ const App: React.FC = () => {
                     isUploading={status === AppStatus.Uploading}
                     processedDocuments={processedDocuments}
                     onDeleteDocument={handleDeleteDocument}
+                    selectedRagStore={selectedRagStore}
                 />;
+            case 'rag_stores':
+                return (
+                    <RagStoreList
+                        stores={ragStores}
+                        selectedStore={selectedRagStore}
+                        isLoading={false} // Adjust as needed
+                        onCreate={handleCreateRagStore}
+                        onSelect={handleSelectRagStore}
+                        onDelete={handleDeleteRagStore}
+                        onRefresh={fetchRagStores}
+                    />
+                );
             case 'chat':
                 if (status === AppStatus.Chatting) {
                     return <ChatInterface
@@ -585,8 +644,8 @@ const App: React.FC = () => {
                     // Verificar se há documentos disponíveis
                     const hasCompletedDocs = processedDocuments.some(doc => doc.status === 'completed');
 
-                    if (!hasCompletedDocs) {
-                        // Sem documentos, mostrar mensagem
+                    if (!hasCompletedDocs || !selectedRagStore) {
+                        // Sem documentos ou RAG Store selecionado, mostrar mensagem
                         return (
                             <div className="flex-1 flex items-center justify-center bg-gradient-to-br from-slate-50 to-slate-100 p-8">
                                 <div className="max-w-md text-center">
@@ -632,7 +691,7 @@ const App: React.FC = () => {
             default:
                 return <Dashboard
                     onNavigateToDocuments={() => setCurrentView('documents')}
-                    hasDocuments={!!activeRagStoreName}
+                    hasDocuments={!!selectedRagStore}
                 />;
         }
     }
@@ -646,6 +705,12 @@ const App: React.FC = () => {
                 currentView={currentView}
                 onNavigate={setCurrentView}
                 hasActiveSession={status === AppStatus.Chatting || hasDocumentsForChat}
+                ragStores={ragStores}
+                selectedRagStore={selectedRagStore}
+                onSelectRagStore={handleSelectRagStore}
+                onCreateRagStore={handleCreateRagStore}
+                onDeleteRagStore={handleDeleteRagStore}
+                onRefreshRagStores={fetchRagStores}
             />
             {renderMainContent()}
         </main>

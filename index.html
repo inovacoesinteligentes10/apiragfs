@@ -1,51 +1,22 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>ApiRAGFS - RAG with Filesystem Storage</title>
-    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📚</text></svg>" />
-    <script type="importmap">
-    {
-      "imports": {
-        "react/": "https://aistudiocdn.com/react@^19.2.0/",
-        "react": "https://aistudiocdn.com/react@^19.2.0",
-        "react-dom/": "https://aistudiocdn.com/react-dom@^19.2.0/",
-        "@google/genai": "https://esm.sh/@google/genai@^1.29.0"
-      }
-    }
-    </script>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script>
-      tailwind.config = {
-        theme: {
-          extend: {
-            colors: {
-              'gem-onyx': '#f8fafc',
-              'gem-slate': '#ffffff',
-              'gem-mist': '#e2e8f0',
-              'gem-offwhite': '#1e293b',
-              'gem-teal': '#0d9488',
-              'gem-blue': '#2563eb',
-            },
-            keyframes: {
-              'progress-stripes': {
-                'from': { backgroundPosition: '1rem 0' },
-                'to': { backgroundPosition: '0 0' },
-              },
-            },
-            animation: {
-              'progress-stripes': 'progress-stripes 1s linear infinite',
-            },
-          }
-        }
-      }
-    </script>
-  
-  <link rel="stylesheet" href="/index.css">
-</head>
-  <body class="bg-gem-onyx">
+    <title>ChatSUA - Sistema UNIFESP</title>
+    <meta name="description" content="Sistema Unificado de Administração da UNIFESP - Gerenciamento de documentos com IA" />
+    <meta name="author" content="UNIFESP" />
+
+    <meta property="og:title" content="ChatSUA - Sistema UNIFESP" />
+    <meta property="og:description" content="Sistema Unificado de Administração da UNIFESP - Gerenciamento de documentos com IA" />
+    <meta property="og:type" content="website" />
+
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:site" content="@UNIFESP" />
+  </head>
+
+  <body>
     <div id="root"></div>
-    <script type="module" src="/index.tsx"></script>
+    <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

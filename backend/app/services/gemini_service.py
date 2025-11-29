@@ -618,6 +618,29 @@ Gere agora os 3 insights baseados nos documentos fornecidos:"""
         except Exception as e:
             print(f"Erro ao deletar RAG store: {str(e)}")
 
+    async def update_rag_store(self, name: str, new_display_name: str):
+        """
+        Atualiza o display name de um RAG store.
+
+        Args:
+            name: O nome completo do RAG store (ex: 'fileStores/my-store-id').
+            new_display_name: O novo nome de exibição para o RAG store.
+        """
+        try:
+            loop = asyncio.get_event_loop()
+            await loop.run_in_executor(
+                None,
+                lambda: self.client.file_search_stores.update(
+                    name=name,
+                    config=types.UpdateFileSearchStoreConfig(
+                        set_paths=["display_name"],
+                        display_name=new_display_name
+                    )
+                )
+            )
+        except Exception as e:
+            print(f"Erro ao atualizar RAG store: {str(e)}")
+
 
 # Instância global
 gemini_service = GeminiService()

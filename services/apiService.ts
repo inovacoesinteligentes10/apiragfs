@@ -58,6 +58,23 @@ export interface DocumentInsight {
     icon: 'document' | 'chart' | 'lightbulb';
 }
 
+export interface RAGStoreResponse {
+    id: string;
+    user_id: string;
+    display_name: string;
+    rag_store_name: string;
+    created_at: string;
+    updated_at: string;
+}
+
+export interface RAGStoreCreate {
+    display_name: string;
+}
+
+export interface RAGStoreUpdate {
+    display_name?: string;
+}
+
 class ApiService {
     private baseUrl: string;
 
@@ -123,6 +140,87 @@ class ApiService {
 
         if (!response.ok) {
             throw new Error('Erro ao deletar documento');
+        }
+    }
+
+    /**
+     * Criar RAG Store
+     */
+    async createRAGStore(data: RAGStoreCreate): Promise<RAGStoreResponse> {
+        const response = await fetch(`${this.baseUrl}/api/v1/rag_stores/`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(data),
+        });
+
+        if (!response.ok) {
+            const error = await response.json();
+            throw new Error(error.detail || 'Erro ao criar RAG Store');
+        }
+
+        return response.json();
+    }
+
+    /**
+     * Listar RAG Stores
+     */
+    async listRAGStores(skip: number = 0, limit: number = 100): Promise<RAGStoreResponse[]> {
+        const response = await fetch(
+            `${this.baseUrl}/api/v1/rag_stores/?skip=${skip}&limit=${limit}`
+        );
+
+        if (!response.ok) {
+            throw new Error('Erro ao listar RAG Stores');
+        }
+
+        return response.json();
+    }
+
+    /**
+     * Buscar RAG Store por ID
+     */
+    async getRAGStore(ragStoreId: string): Promise<RAGStoreResponse> {
+        const response = await fetch(`${this.baseUrl}/api/v1/rag_stores/${ragStoreId}`);
+
+        if (!response.ok) {
+            throw new Error('RAG Store não encontrado');
+        }
+
+        return response.json();
+    }
+
+    /**
+     * Atualizar RAG Store
+     */
+    async updateRAGStore(ragStoreId: string, data: RAGStoreUpdate): Promise<RAGStoreResponse> {
+        const response = await fetch(`${this.baseUrl}/api/v1/rag_stores/${ragStoreId}`, {
+            method: 'PUT',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(data),
+        });
+
+        if (!response.ok) {
+            const error = await response.json();
+            throw new Error(error.detail || 'Erro ao atualizar RAG Store');
+        }
+
+        return response.json();
+    }
+
+    /**
+     * Deletar RAG Store
+     */
+    async deleteRAGStore(ragStoreId: string): Promise<void> {
+        const response = await fetch(`${this.baseUrl}/api/v1/rag_stores/${ragStoreId}`, {
+            method: 'DELETE',
+        });
+
+        if (!response.ok) {
+            throw new Error('Erro ao deletar RAG Store');
         }
     }
 

@@ -4,14 +4,22 @@
 */
 
 import React from 'react';
+import { RAGStoreResponse, RAGStoreCreate } from '../services/apiService';
+import PlusIcon from './icons/PlusIcon'; // Importe o ícone de +
 
 interface SidebarProps {
-    currentView: 'dashboard' | 'documents' | 'chat' | 'analytics' | 'status' | 'settings';
-    onNavigate: (view: 'dashboard' | 'documents' | 'chat' | 'analytics' | 'status' | 'settings') => void;
+    currentView: 'dashboard' | 'documents' | 'chat' | 'analytics' | 'status' | 'settings' | 'rag_stores';
+    onNavigate: (view: 'dashboard' | 'documents' | 'chat' | 'analytics' | 'status' | 'settings' | 'rag_stores') => void;
     hasActiveSession: boolean;
+    ragStores: RAGStoreResponse[];
+    selectedRagStore: RAGStoreResponse | null;
+    onSelectRagStore: (store: RAGStoreResponse) => void;
+    onCreateRagStore: (data: RAGStoreCreate) => void;
+    onDeleteRagStore: (ragStoreId: string) => void;
+    onRefreshRagStores: () => void;
 }
 
-const Sidebar: React.FC<SidebarProps> = ({ currentView, onNavigate, hasActiveSession }) => {
+const Sidebar: React.FC<SidebarProps> = ({ currentView, onNavigate, hasActiveSession, ragStores, selectedRagStore, onSelectRagStore, onCreateRagStore, onDeleteRagStore, onRefreshRagStores }) => {
     const menuSections = [
         {
             title: 'Principal',
@@ -43,6 +51,20 @@ const Sidebar: React.FC<SidebarProps> = ({ currentView, onNavigate, hasActiveSes
                         </svg>
                     ),
                     disabled: !hasActiveSession
+                }
+            ]
+        },
+        {
+            title: 'Gerenciamento de RAG',
+            items: [
+                {
+                    id: 'rag_stores' as const,
+                    label: 'RAG Stores',
+                    icon: (
+                         <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4" />
+                        </svg>
+                    )
                 }
             ]
         },
