@@ -4,19 +4,27 @@
 */
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { Toaster } from 'react-hot-toast';
 import { AppStatus, ChatMessage, ProcessedDocument } from './types';
 import * as geminiService from './services/geminiService';
-import { apiService, RAGStoreResponse, RAGStoreCreate } from './services/apiService';
+import { apiService, RAGStoreResponse, RAGStoreCreate, RagStore } from './services/apiService';
+import { showSuccess, showError, showInfo, showWarning } from './utils/toast';
+import { AuthProvider, useAuth } from './contexts/AuthContext';
+import { SystemConfigProvider } from './contexts/SystemConfigContext';
 import Spinner from './components/Spinner';
 import Sidebar from './components/Sidebar';
 import Dashboard from './components/Dashboard';
 import DocumentsView from './components/DocumentsView';
-import DocumentsTable from './components/DocumentsTable';
 import ProgressBar from './components/ProgressBar';
 import ChatInterface from './components/ChatInterface';
 import Analytics from './components/Analytics';
 import StatusView from './components/StatusView';
 import Settings from './components/Settings';
+import StoreManagement from './components/StoreManagement';
+import UsersManagement from './components/UsersManagement';
+import ChatsView from './components/ChatsView';
+import DeleteConfirmationModal from './components/DeleteConfirmationModal';
+import AuthModal from './components/AuthModal';
 
 // DO: Define the AIStudio interface to resolve a type conflict where `window.aistudio` was being redeclared with an anonymous type.
 // FIX: Moved the AIStudio interface definition inside the `declare global` block to resolve a TypeScript type conflict.
@@ -30,16 +38,18 @@ declare global {
     }
 }
 
-const App: React.FC = () => {
-    const [currentView, setCurrentView] = useState<'dashboard' | 'documents' | 'chat' | 'analytics' | 'status' | 'settings' | 'rag_stores'>('dashboard');
+const AppContent: React.FC = () => {
+    const { user, loading: authLoading } = useAuth();
+    const [showAuthModal, setShowAuthModal] = useState(false);
+    const [currentView, setCurrentView] = useState<'dashboard' | 'documents' | 'chat' | 'analytics' | 'status' | 'settings' | 'stores' | 'users' | 'chats' | 'rag_stores'>('dashboard');
     const [status, setStatus] = useState<AppStatus>(AppStatus.Welcome);
     const [isApiKeySelected, setIsApiKeySelected] = useState(false);
     const [apiKeyError, setApiKeyError] = useState<string | null>(null);
     const [error, setError] = useState<string | null>(null);
     const [uploadProgress, setUploadProgress] = useState<{ current: number, total: number, message?: string, fileName?: string } | null>(null);
     const [activeRagStoreName, setActiveRagStoreName] = useState<string | null>(null); // This is actually the session ID
-    const [ragStores, setRagStores] = useState<RAGStoreResponse[]>([]);
-    const [selectedRagStore, setSelectedRagStore] = useState<RAGStoreResponse | null>(null);
+    const [ragStores, setRagStores] = useState<RagStore[]>([]);
+    const [selectedStore, setSelectedStore] = useState<RagStore | null>(null);
     const [chatHistory, setChatHistory] = useState<ChatMessage[]>([]);
     const [isQueryLoading, setIsQueryLoading] = useState(false);
     const [exampleQuestions, setExampleQuestions] = useState<string[]>([]);
@@ -48,9 +58,84 @@ const App: React.FC = () => {
     const [processedDocuments, setProcessedDocuments] = useState<ProcessedDocument[]>([]);
     const ragStoreNameRef = useRef(activeRagStoreName);
 
+    // Estado para o modal de confirmação de exclusão
+    const [deleteModal, setDeleteModal] = useState<{
+        isOpen: boolean;
+        documentId: string | null;
+        documentName: string | null;
+        isDeleting: boolean;
+    }>({
+        isOpen: false,
+        documentId: null,
+        documentName: null,
+        isDeleting: false
+    });
+
     useEffect(() => {
         ragStoreNameRef.current = activeRagStoreName;
     }, [activeRagStoreName]);
+
+    // Recarregar todos os dados quando o usuário mudar (login/logout)
+    useEffect(() => {
+        const reloadAllData = async () => {
+            if (!user) {
+                // Limpar todos os dados ao fazer logout
+                setProcessedDocuments([]);
+                setRagStores([]);
+                setSelectedStore(null);
+                setChatHistory([]);
+                setActiveRagStoreName(null);
+                setCurrentView('dashboard');
+                return;
+            }
+
+            // Recarregar stores
+            try {
+                const stores = await apiService.listRagStores();
+                console.log('📦 RAG Stores recarregados para usuário:', user.username);
+                setRagStores(stores);
+
+                if (stores.length > 0) {
+                    const storeWithDocs = stores.find(s => s.document_count > 0) || stores[0];
+                    setSelectedStore(storeWithDocs);
+                }
+            } catch (err) {
+                console.error('Erro ao recarregar stores:', err);
+            }
+
+            // Recarregar documentos
+            try {
+                const docs = await apiService.listDocuments();
+                const stores = await apiService.listRagStores();
+                const storeMap = new Map(stores.map(s => [s.name, s.display_name]));
+
+                const processedDocs: ProcessedDocument[] = docs.map(doc => ({
+                    id: doc.id,
+                    name: doc.name,
+                    type: doc.type,
+                    size: doc.size,
+                    textLength: doc.text_length,
+                    extractionMethod: doc.extraction_method,
+                    department: doc.department || null,
+                    departmentDisplayName: doc.department ? storeMap.get(doc.department) || doc.department : null,
+                    chunks: doc.chunks,
+                    processingTime: doc.processing_time,
+                    status: doc.status,
+                    progressPercent: doc.progress_percent,
+                    statusMessage: doc.status_message,
+                    errorMessage: doc.error_message,
+                    uploadDate: doc.upload_date
+                }));
+
+                setProcessedDocuments(processedDocs);
+                console.log('📄 Documentos recarregados:', processedDocs.length);
+            } catch (err) {
+                console.error('Erro ao recarregar documentos:', err);
+            }
+        };
+
+        reloadAllData();
+    }, [user?.id]); // Observa mudanças no ID do usuário
     
     const checkApiKey = useCallback(async () => {
         if (window.aistudio?.hasSelectedApiKey) {
@@ -119,21 +204,21 @@ const App: React.FC = () => {
 
     const fetchRagStores = useCallback(async () => {
         try {
-            const stores = await apiService.listRAGStores();
+            const stores = await apiService.listRagStores();
             setRagStores(stores);
-            if (stores.length > 0 && !selectedRagStore) {
-                setSelectedRagStore(stores[0]); // Seleciona o primeiro por padrão
+            if (stores.length > 0 && !selectedStore) {
+                setSelectedStore(stores[0]); // Seleciona o primeiro por padrão
             }
         } catch (err) {
             handleError("Erro ao carregar RAG Stores", err);
         }
-    }, [selectedRagStore]);
+    }, [selectedStore]);
 
     const handleCreateRagStore = async (data: RAGStoreCreate) => {
         try {
             const newStore = await apiService.createRAGStore(data);
             setRagStores(prev => [...prev, newStore]);
-            setSelectedRagStore(newStore); // Seleciona o novo RAG Store
+            setSelectedStore(newStore); // Seleciona o novo RAG Store
             setCurrentView('documents'); // Redireciona para documentos após criar
         } catch (err) {
             handleError("Erro ao criar RAG Store", err);
@@ -144,16 +229,16 @@ const App: React.FC = () => {
         try {
             await apiService.deleteRAGStore(ragStoreId);
             setRagStores(prev => prev.filter(store => store.id !== ragStoreId));
-            if (selectedRagStore?.id === ragStoreId) {
-                setSelectedRagStore(null); // Deseleciona se o store ativo foi deletado
+            if (selectedStore?.id === ragStoreId) {
+                setSelectedStore(null); // Deseleciona se o store ativo foi deletado
             }
         } catch (err) {
             handleError("Erro ao deletar RAG Store", err);
         }
     };
 
-    const handleSelectRagStore = (store: RAGStoreResponse) => {
-        setSelectedRagStore(store);
+    const handleSelectRagStore = (store: RagStore) => {
+        setSelectedStore(store);
         setCurrentView('documents'); // Redireciona para documentos ao selecionar
     };
 
@@ -165,30 +250,35 @@ const App: React.FC = () => {
     // Carregar documentos existentes ao iniciar
     useEffect(() => {
         const loadDocuments = async () => {
-            if (!selectedRagStore) {
+            if (!selectedStore) {
                 setProcessedDocuments([]);
                 return;
             }
             try {
-                const docs = await apiService.listDocuments(); // TODO: Filtrar por RAG Store
-                const processedDocs: ProcessedDocument[] = docs
-                    .filter(doc => doc.rag_store_name === selectedRagStore.rag_store_name) // Filter by selected RAG Store
-                    .map(doc => ({
-                        id: doc.id,
-                        name: doc.name,
-                        type: doc.type,
-                        size: doc.size,
-                        textLength: doc.text_length,
-                        extractionMethod: doc.extraction_method,
-                        chunks: doc.chunks,
-                        processingTime: doc.processing_time,
-                        status: doc.status,
-                        progressPercent: doc.progress_percent,
-                        statusMessage: doc.status_message,
-                        ragStoreName: doc.rag_store_name,
-                        uploadDate: new Date(doc.upload_date),
-                        error: doc.error_message || undefined
-                    }));
+                const docs = await apiService.listDocuments();
+
+                // Buscar stores para mapear department -> display_name
+                const stores = ragStores.length > 0 ? ragStores : await apiService.listRagStores();
+                const storeMap = new Map(stores.map(s => [s.name, s.display_name]));
+
+                const processedDocs: ProcessedDocument[] = docs.map(doc => ({
+                    id: doc.id,
+                    name: doc.name,
+                    type: doc.type,
+                    size: doc.size,
+                    textLength: doc.text_length,
+                    extractionMethod: doc.extraction_method,
+                    department: doc.department || null,
+                    departmentDisplayName: doc.department ? storeMap.get(doc.department) || doc.department : null,
+                    chunks: doc.chunks,
+                    processingTime: doc.processing_time,
+                    status: doc.status,
+                    progressPercent: doc.progress_percent,
+                    statusMessage: doc.status_message,
+                    ragStoreName: doc.rag_store_name,
+                    uploadDate: new Date(doc.upload_date),
+                    error: doc.error_message || undefined
+                }));
                 setProcessedDocuments(processedDocs);
             } catch (err) {
                 console.error('Erro ao carregar documentos:', err);
@@ -196,7 +286,7 @@ const App: React.FC = () => {
         };
 
         loadDocuments();
-    }, [selectedRagStore]); // Reload documents when selectedRagStore changes
+    }, [ragStores, selectedStore]); // Reload documents when selectedRagStore changes
 
     // Polling para atualizar status de documentos em processamento
     useEffect(() => {
@@ -213,15 +303,23 @@ const App: React.FC = () => {
                 for (const doc of processingDocs) {
                     const updatedDoc = await apiService.getDocument(doc.id);
 
-                    // Verificar se o status mudou de processing para completed
-                    const wasProcessing = doc.status === 'processing';
+                    // Verificar se o status mudou de qualquer estado de processamento para completed
+                    const wasProcessing = doc.status !== 'completed' && doc.status !== 'error';
                     const isNowCompleted = updatedDoc.status === 'completed';
+
+                    // Mapear department -> display_name
+                    const storeMap = new Map(ragStores.map(s => [s.name, s.display_name]));
+                    const departmentDisplayName = updatedDoc.department
+                        ? storeMap.get(updatedDoc.department) || updatedDoc.department
+                        : null;
 
                     setProcessedDocuments(prev => prev.map(d =>
                         d.id === doc.id ? {
                             ...d,
                             textLength: updatedDoc.text_length,
                             extractionMethod: updatedDoc.extraction_method,
+                            department: updatedDoc.department || null,
+                            departmentDisplayName: departmentDisplayName,
                             chunks: updatedDoc.chunks,
                             processingTime: updatedDoc.processing_time,
                             status: updatedDoc.status,
@@ -252,7 +350,7 @@ const App: React.FC = () => {
             const interval = setInterval(pollDocuments, 2000);
             return () => clearInterval(interval);
         }
-    }, [processedDocuments]);
+    }, [processedDocuments, ragStores]);
 
     // Auto-iniciar chat quando navegar para view de chat e houver documentos
     useEffect(() => {
@@ -267,7 +365,7 @@ const App: React.FC = () => {
                 status !== AppStatus.Chatting &&
                 status !== AppStatus.Uploading &&
                 status !== AppStatus.Error &&
-                selectedRagStore &&
+                selectedStore &&
                 processedDocuments.some(doc => doc.status === 'completed')
             ) {
                 await handleStartChat();
@@ -275,7 +373,7 @@ const App: React.FC = () => {
         };
 
         autoStartChat();
-    }, [currentView, status, selectedRagStore, processedDocuments]); // Executar quando mudar a view, status, selectedRagStore ou processedDocuments
+    }, [currentView, status, selectedStore, processedDocuments]); // Executar quando mudar a view, status, selectedRagStore ou processedDocuments
 
     const handleSelectKey = async () => {
         if (window.aistudio?.openSelectKey) {
@@ -287,13 +385,13 @@ const App: React.FC = () => {
             }
         } else {
             console.log('Running in local environment. API key should be configured in .env.local');
-            alert('Running in local mode. Please configure your GEMINI_API_KEY in the .env.local file.');
+            showInfo('Modo local: Configure sua GEMINI_API_KEY no arquivo .env.local');
         }
     };
 
     const handleUploadAndStartChat = async () => {
         if (files.length === 0) return;
-        if (!selectedRagStore) {
+        if (!selectedStore) {
             alert('Por favor, selecione ou crie um RAG Store antes de fazer upload.');
             return;
         }
@@ -315,8 +413,33 @@ const App: React.FC = () => {
                 }));
 
                 try {
-                    // Upload via API backend
-                    const uploadedDoc = await apiService.uploadDocument(file); // TODO: Pass selectedRAGStore.rag_store_name to upload
+                    // Upload via API backend com department do store selecionado
+                    const department = selectedStore?.name || 'geral';
+
+                    // Callback de progresso real
+                    const onProgress = (progress: number, status: string, statusMessage?: string) => {
+                        const statusMessages: Record<string, string> = {
+                            'uploaded': 'Arquivo enviado',
+                            'extracting': 'Extraindo texto',
+                            'chunking': 'Dividindo em chunks',
+                            'embedding': 'Gerando embeddings',
+                            'indexing': 'Indexando no RAG',
+                            'completed': 'Processamento completo',
+                            'error': 'Erro no processamento'
+                        };
+
+                        setUploadProgress({
+                            current: Math.round(progress),
+                            total: 100,
+                            message: statusMessage || statusMessages[status] || 'Processando...',
+                            fileName: `(${i + 1}/${files.length}) ${file.name}`
+                        });
+                    };
+
+                    const uploadedDoc = await apiService.uploadDocument(file, department, onProgress);
+
+                    // Buscar display_name do department
+                    const storeMap = new Map(ragStores.map(s => [s.name, s.display_name]));
 
                     // Criar documento processado para exibição
                     const doc: ProcessedDocument = {
@@ -326,6 +449,8 @@ const App: React.FC = () => {
                         size: uploadedDoc.size,
                         textLength: uploadedDoc.text_length,
                         extractionMethod: uploadedDoc.extraction_method,
+                        department: uploadedDoc.department || department,
+                        departmentDisplayName: storeMap.get(uploadedDoc.department || department) || department,
                         chunks: uploadedDoc.chunks,
                         processingTime: uploadedDoc.processing_time,
                         status: uploadedDoc.status,
@@ -336,6 +461,7 @@ const App: React.FC = () => {
                     };
 
                     setProcessedDocuments(prev => [...prev, doc]);
+                    showSuccess(`Documento ${file.name} processado com sucesso!`);
 
                 } catch (err) {
                     const doc: ProcessedDocument = {
@@ -355,12 +481,30 @@ const App: React.FC = () => {
                     };
 
                     setProcessedDocuments(prev => [...prev, doc]);
+                    showError(`Erro ao processar ${file.name}: ${err instanceof Error ? err.message : 'Erro desconhecido'}`);
                     handleError("Falha ao fazer upload", err);
                 }
             }
 
             setUploadProgress({ current: totalSteps, total: totalSteps, message: "Upload concluído!", fileName: "" });
+            showInfo(`${files.length} documento(s) processado(s) com sucesso!`);
             await new Promise(resolve => setTimeout(resolve, 1000));
+
+            // Recarregar stores para atualizar contagem de documentos
+            try {
+                const updatedStores = await apiService.listRagStores();
+                setRagStores(updatedStores);
+
+                // Atualizar o store selecionado com os dados mais recentes
+                if (selectedStore) {
+                    const updatedSelectedStore = updatedStores.find(s => s.id === selectedStore.id);
+                    if (updatedSelectedStore) {
+                        setSelectedStore(updatedSelectedStore);
+                    }
+                }
+            } catch (err) {
+                console.error('Erro ao recarregar stores:', err);
+            }
 
             // Limpar arquivos selecionados e voltar ao estado normal
             setFiles([]);
@@ -372,18 +516,206 @@ const App: React.FC = () => {
         }
     };
 
-    const handleDeleteDocument = async (id: string) => {
+    const handleDeleteDocument = (id: string) => {
+        // Encontrar o documento para obter o nome
+        const document = processedDocuments.find(doc => doc.id === id);
+
+        // Abrir modal de confirmação
+        setDeleteModal({
+            isOpen: true,
+            documentId: id,
+            documentName: document?.name || 'Documento desconhecido',
+            isDeleting: false
+        });
+    };
+
+    const confirmDeleteDocument = async () => {
+        if (!deleteModal.documentId) return;
+
+        // Marcar como deletando
+        setDeleteModal(prev => ({ ...prev, isDeleting: true }));
+
         try {
-            await apiService.deleteDocument(id);
-            setProcessedDocuments(prev => prev.filter(doc => doc.id !== id));
+            await apiService.deleteDocument(deleteModal.documentId);
+            setProcessedDocuments(prev => prev.filter(doc => doc.id !== deleteModal.documentId));
+
+            showSuccess(`Documento "${deleteModal.documentName}" excluído com sucesso!`);
+
+            // Recarregar stores para atualizar contagem
+            try {
+                const updatedStores = await apiService.listRagStores();
+                setRagStores(updatedStores);
+
+                if (selectedStore) {
+                    const updatedSelectedStore = updatedStores.find(s => s.id === selectedStore.id);
+                    if (updatedSelectedStore) {
+                        setSelectedStore(updatedSelectedStore);
+                    }
+                }
+            } catch (err) {
+                console.error('Erro ao recarregar stores:', err);
+            }
+
+            // Fechar modal
+            setDeleteModal({
+                isOpen: false,
+                documentId: null,
+                documentName: null,
+                isDeleting: false
+            });
         } catch (err) {
             console.error('Erro ao deletar documento:', err);
-            alert('Erro ao deletar documento. Por favor, tente novamente.');
+            showError(`Erro ao excluir documento: ${err instanceof Error ? err.message : 'Erro desconhecido'}`);
+            setDeleteModal(prev => ({ ...prev, isDeleting: false }));
+        }
+    };
+
+    const cancelDeleteDocument = () => {
+        setDeleteModal({
+            isOpen: false,
+            documentId: null,
+            documentName: null,
+            isDeleting: false
+        });
+    };
+
+    const handleMoveDocumentStore = async (documentId: string, targetStore: string) => {
+        try {
+            // Chamar API para mover documento
+            await apiService.moveDocumentToStore(documentId, targetStore);
+
+            // Atualizar documento localmente para mostrar status de reprocessamento
+            // Resetar todos os campos de processamento
+            setProcessedDocuments(prev => prev.map(doc =>
+                doc.id === documentId
+                    ? {
+                        ...doc,
+                        department: targetStore,
+                        status: 'uploaded',
+                        progressPercent: 0,
+                        statusMessage: null,
+                        error: null,
+                        ragStoreName: null,
+                        textLength: null,
+                        chunks: null,
+                        processingTime: null,
+                        extractionMethod: null
+                    }
+                    : doc
+            ));
+
+            // Recarregar stores para atualizar contagens
+            try {
+                const updatedStores = await apiService.listRagStores();
+                setRagStores(updatedStores);
+
+                if (selectedStore) {
+                    const updatedSelectedStore = updatedStores.find(s => s.id === selectedStore.id);
+                    if (updatedSelectedStore) {
+                        setSelectedStore(updatedSelectedStore);
+                    }
+                }
+            } catch (err) {
+                console.error('Erro ao recarregar stores:', err);
+            }
+        } catch (err) {
+            console.error('Erro ao mover documento:', err);
+            showError('Erro ao mover documento. Por favor, tente novamente.');
+        }
+    };
+
+    const handleSelectStore = async (store: RagStore) => {
+        console.log('🔄 Mudando para store:', store.display_name);
+
+        // Se já está em chat, reiniciar com o novo store
+        if (status === AppStatus.Chatting) {
+            // Encerrar chat atual
+            if (activeRagStoreName) {
+                apiService.deleteChatSession(activeRagStoreName).catch(err => {
+                    console.error("Falha ao deletar sessão de chat:", err);
+                });
+            }
+
+            setActiveRagStoreName(null);
+            setChatHistory([]);
+            setExampleQuestions([]);
+            setInsights([]);
+            setStatus(AppStatus.Welcome);
+        }
+
+        // Atualizar store selecionado
+        setSelectedStore(store);
+
+        // Se estiver na view de chat, iniciar automaticamente com o novo store
+        if (currentView === 'chat' && store.rag_store_name) {
+            await handleStartChatWithStore(store);
+        }
+    };
+
+    const handleStartChatWithStore = async (store: RagStore) => {
+        // Verificar se o store tem documentos
+        if (!store.rag_store_name || store.document_count === 0) {
+            showWarning('Este store ainda não possui documentos. Faça upload de documentos antes de iniciar o chat.');
+            setCurrentView('documents');
+            return;
+        }
+
+        try {
+            console.log('🚀 Iniciando chat com store:', store.display_name);
+            setStatus(AppStatus.Uploading);
+            setUploadProgress({ current: 0, total: 3, message: "Criando sessão de chat..." });
+
+            // Criar sessão de chat no backend com o RAG store selecionado
+            const session = await apiService.createChatSession(store.rag_store_name);
+            console.log('✅ Sessão criada:', session);
+
+            setUploadProgress({ current: 1, total: 3, message: "Carregando histórico..." });
+
+            // Buscar mensagens anteriores (se existir histórico)
+            const messages = await apiService.getSessionMessages(session.id);
+            const formattedHistory: ChatMessage[] = messages.map(msg => ({
+                role: msg.role,
+                parts: [{ text: msg.content }],
+                groundingChunks: msg.grounding_chunks ? msg.grounding_chunks.map((chunk: any) => ({
+                    retrievedContext: { text: chunk.text || '' }
+                })) : undefined
+            }));
+
+            setUploadProgress({ current: 2, total: 3, message: "Preparando chat..." });
+
+            // Configurar estado do chat
+            setActiveRagStoreName(session.id);
+            setChatHistory(formattedHistory);
+            setExampleQuestions([]);
+
+            setUploadProgress({ current: 3, total: 3, message: "Pronto!" });
+
+            // Buscar insights dos documentos
+            try {
+                const sessionInsights = await apiService.getSessionInsights(session.id);
+                setInsights(sessionInsights);
+            } catch (err) {
+                console.error('Erro ao buscar insights:', err);
+                setInsights([]);
+            }
+
+            await new Promise(resolve => setTimeout(resolve, 500));
+
+            // Mudar para view de chat
+            setStatus(AppStatus.Chatting);
+            setCurrentView('chat');
+        } catch (err) {
+            console.error('❌ Erro ao iniciar chat:', err);
+            const errorMessage = err instanceof Error ? err.message : String(err);
+            showError(`Erro ao iniciar chat: ${errorMessage}`);
+            setStatus(AppStatus.Welcome);
+        } finally {
+            setUploadProgress(null);
         }
     };
 
     const handleStartChat = async () => {
-        if (!selectedRagStore) {
+        if (!selectedStore) {
             alert('Por favor, selecione um RAG Store antes de iniciar o chat.');
             return;
         }
@@ -391,21 +723,40 @@ const App: React.FC = () => {
         try {
             console.log('🚀 Iniciando chat...');
 
-            // Verificar se há documentos completados no RAG Store selecionado
-            const completedDocsInSelectedStore = processedDocuments.filter(
-                doc => doc.status === 'completed' && doc.rag_store_name === selectedRagStore.rag_store_name
-            );
+            // Se há um store selecionado, usar ele
+            if (selectedStore && selectedStore.rag_store_name) {
+                await handleStartChatWithStore(selectedStore);
+                return;
+            }
 
-            if (completedDocsInSelectedStore.length === 0) {
-                alert(`Nenhum documento completo no RAG Store '${selectedRagStore.display_name}'. Faça upload de documentos primeiro.`);
+            // Fallback: Verificar se há documentos completados (comportamento antigo)
+            const completedDocs = processedDocuments.filter(doc => doc.status === 'completed');
+            console.log('📄 Documentos completados:', completedDocs);
+
+            if (completedDocs.length === 0) {
+                showWarning('Nenhum documento disponível para chat. Faça upload de documentos primeiro.');
                 return;
             }
 
             setStatus(AppStatus.Uploading);
             setUploadProgress({ current: 0, total: 3, message: "Criando sessão de chat..." });
 
-            // Criar sessão de chat no backend usando o rag_store_name do selectedRagStore
-            const session = await apiService.createChatSession(selectedRagStore.rag_store_name);
+            // Buscar o RAG store global do primeiro documento
+            const firstDoc = completedDocs[0];
+            console.log('📌 Primeiro documento:', firstDoc);
+
+            const fullDocument = await apiService.getDocument(firstDoc.id);
+            console.log('📦 Documento completo do backend:', fullDocument);
+
+            if (!fullDocument.rag_store_name) {
+                console.error('❌ Documento não possui RAG Store:', fullDocument);
+                throw new Error("Documento não possui RAG Store. Faça upload novamente.");
+            }
+
+            console.log('🏪 RAG Store Name:', fullDocument.rag_store_name);
+
+            // Criar sessão de chat no backend
+            const session = await apiService.createChatSession(fullDocument.rag_store_name);
             console.log('✅ Sessão criada:', session);
 
             setUploadProgress({ current: 1, total: 3, message: "Carregando histórico..." });
@@ -448,7 +799,7 @@ const App: React.FC = () => {
             console.error('Stack trace:', err instanceof Error ? err.stack : 'N/A');
 
             const errorMessage = err instanceof Error ? err.message : String(err);
-            alert(`Erro ao iniciar chat: ${errorMessage}\n\nVerifique o console do navegador para mais detalhes.`);
+            showError(`Erro ao iniciar chat: ${errorMessage}. Verifique o console para mais detalhes.`);
             setStatus(AppStatus.Welcome);
         } finally {
             setUploadProgress(null);
@@ -533,14 +884,52 @@ const App: React.FC = () => {
                 // onError: Tratar erros
                 (error: string) => {
                     console.error("❌ Erro ao enviar mensagem:", error);
-                    setChatHistory(prev => {
-                        const newHistory = [...prev];
-                        const lastMessage = newHistory[newHistory.length - 1];
-                        if (lastMessage && lastMessage.role === 'model') {
-                            lastMessage.parts = [{ text: "Desculpe, encontrei um erro. Por favor, tente novamente." }];
+
+                    // Verificar se é erro de RAG store inválido/inexistente ou sessão não encontrada
+                    const isRagStoreError = error.includes("RAG store não existe") ||
+                                          error.includes("não está acessível") ||
+                                          error.includes("Sessão não encontrada") ||
+                                          error.includes("não encontrada") ||
+                                          error.includes("INVALID_ARGUMENT") ||
+                                          error.includes("PERMISSION_DENIED");
+
+                    if (isRagStoreError) {
+                        // RAG store inválido - limpar sessão e redirecionar
+                        console.warn("⚠️ RAG store inválido detectado. Limpando sessão...");
+
+                        // Deletar sessão órfã do backend
+                        if (activeRagStoreName) {
+                            apiService.deleteChatSession(activeRagStoreName).catch(err => {
+                                console.error("Falha ao deletar sessão órfã:", err);
+                            });
                         }
-                        return newHistory;
-                    });
+
+                        setActiveRagStoreName(null);
+                        setChatHistory([]);
+                        setExampleQuestions([]);
+                        setInsights([]);
+                        setFiles([]);
+                        setStatus(AppStatus.Welcome);
+                        setCurrentView('dashboard');
+
+                        // Mostrar mensagem informativa com toast
+                        showWarning(
+                            'Conversa não disponível: os documentos foram removidos. ' +
+                            'Faça upload de novos documentos para iniciar uma nova sessão.',
+                            { duration: 6000 }
+                        );
+                    } else {
+                        // Erro genérico
+                        setChatHistory(prev => {
+                            const newHistory = [...prev];
+                            const lastMessage = newHistory[newHistory.length - 1];
+                            if (lastMessage && lastMessage.role === 'model') {
+                                lastMessage.parts = [{ text: `❌ ${error}` }];
+                            }
+                            return newHistory;
+                        });
+                    }
+
                     setIsQueryLoading(false);
                 }
             );
@@ -603,7 +992,12 @@ const App: React.FC = () => {
             case 'dashboard':
                 return <Dashboard
                     onNavigateToDocuments={() => setCurrentView('documents')}
-                    hasDocuments={!!selectedRagStore}
+                    hasDocuments={!!activeRagStoreName}
+                    stores={ragStores}
+                    documents={processedDocuments}
+                    onNavigateToStores={() => setCurrentView('stores')}
+                    onNavigateToChat={() => setCurrentView('chat')}
+                    onSelectStore={handleSelectStore}
                 />;
             case 'documents':
                 return <DocumentsView
@@ -616,22 +1010,22 @@ const App: React.FC = () => {
                     isUploading={status === AppStatus.Uploading}
                     processedDocuments={processedDocuments}
                     onDeleteDocument={handleDeleteDocument}
-                    selectedRagStore={selectedRagStore}
+                    onMoveDocumentStore={handleMoveDocumentStore}
+                    stores={ragStores}
+                    selectedStore={selectedStore}
+                    onSelectStore={handleSelectStore}
                 />;
             case 'rag_stores':
-                return (
-                    <RagStoreList
-                        stores={ragStores}
-                        selectedStore={selectedRagStore}
-                        isLoading={false} // Adjust as needed
-                        onCreate={handleCreateRagStore}
-                        onSelect={handleSelectRagStore}
-                        onDelete={handleDeleteRagStore}
-                        onRefresh={fetchRagStores}
-                    />
+                 return (
+                    <StoreManagement />
                 );
             case 'chat':
                 if (status === AppStatus.Chatting) {
+                    // Filtrar apenas stores com documentos para o chat
+                    const storesWithDocuments = ragStores.filter(store =>
+                        store.document_count > 0 && store.rag_store_name
+                    );
+
                     return <ChatInterface
                         history={chatHistory}
                         isQueryLoading={isQueryLoading}
@@ -639,12 +1033,15 @@ const App: React.FC = () => {
                         onNewChat={handleEndChat}
                         exampleQuestions={exampleQuestions}
                         insights={insights}
+                        stores={storesWithDocuments}
+                        selectedStore={selectedStore}
+                        onSelectStore={handleSelectStore}
                     />;
                 } else {
                     // Verificar se há documentos disponíveis
                     const hasCompletedDocs = processedDocuments.some(doc => doc.status === 'completed');
 
-                    if (!hasCompletedDocs || !selectedRagStore) {
+                    if (!hasCompletedDocs || !selectedStore) {
                         // Sem documentos ou RAG Store selecionado, mostrar mensagem
                         return (
                             <div className="flex-1 flex items-center justify-center bg-gradient-to-br from-slate-50 to-slate-100 p-8">
@@ -688,32 +1085,89 @@ const App: React.FC = () => {
                 return <StatusView />;
             case 'settings':
                 return <Settings />;
+            case 'stores':
+                return <StoreManagement />;
+            case 'users':
+                return <UsersManagement />;
+            case 'chats':
+                return <ChatsView />;
             default:
                 return <Dashboard
                     onNavigateToDocuments={() => setCurrentView('documents')}
-                    hasDocuments={!!selectedRagStore}
+                    hasDocuments={!!activeRagStoreName}
+                    stores={ragStores}
+                    documents={processedDocuments}
+                    onNavigateToStores={() => setCurrentView('stores')}
+                    onNavigateToChat={() => setCurrentView('chat')}
+                    onSelectStore={handleSelectStore}
                 />;
         }
     }
 
-    // Verificar se há documentos processados disponíveis para chat
-    const hasDocumentsForChat = processedDocuments.some(doc => doc.status === 'completed');
+    // Verificar se há documentos processados disponíveis para chat no store selecionado
+    const hasDocumentsForChat = React.useMemo(() => {
+        // Se não há store selecionado, desabilitar chat
+        if (!selectedStore) {
+            return false;
+        }
+
+        // Verificar se o store selecionado tem documentos completos
+        const storeHasDocuments = processedDocuments.some(doc =>
+            doc.status === 'completed' &&
+            doc.department === selectedStore.name
+        );
+
+        return storeHasDocuments || selectedStore.document_count > 0;
+    }, [selectedStore, processedDocuments]);
 
     return (
-        <main className="h-screen flex bg-slate-900">
-            <Sidebar
-                currentView={currentView}
-                onNavigate={setCurrentView}
-                hasActiveSession={status === AppStatus.Chatting || hasDocumentsForChat}
-                ragStores={ragStores}
-                selectedRagStore={selectedRagStore}
-                onSelectRagStore={handleSelectRagStore}
-                onCreateRagStore={handleCreateRagStore}
-                onDeleteRagStore={handleDeleteRagStore}
-                onRefreshRagStores={fetchRagStores}
+        <>
+            <main className="h-screen flex bg-slate-900">
+                <Sidebar
+                    currentView={currentView}
+                    onNavigate={setCurrentView}
+                    hasActiveSession={status === AppStatus.Chatting || hasDocumentsForChat}
+                    onOpenAuth={() => setShowAuthModal(true)}
+                    onNewChat={() => {
+                        // TODO: Implement new chat logic
+                        setCurrentView('chat');
+                    }}
+                />
+                {renderMainContent()}
+            </main>
+
+            {/* Modal de confirmação de exclusão */}
+            <DeleteConfirmationModal
+                isOpen={deleteModal.isOpen}
+                onClose={cancelDeleteDocument}
+                onConfirm={confirmDeleteDocument}
+                title="Excluir Documento"
+                message="Tem certeza que deseja excluir este documento?"
+                documentName={deleteModal.documentName || undefined}
+                isDeleting={deleteModal.isDeleting}
             />
-            {renderMainContent()}
-        </main>
+
+            {/* Toast notifications */}
+            <Toaster position="top-right" />
+
+            {/* Auth Modal */}
+            <AuthModal
+                isOpen={showAuthModal}
+                onClose={() => setShowAuthModal(false)}
+                initialMode="login"
+            />
+        </>
+    );
+};
+
+// Wrapper principal com AuthProvider e SystemConfigProvider
+const App: React.FC = () => {
+    return (
+        <AuthProvider>
+            <SystemConfigProvider>
+                <AppContent />
+            </SystemConfigProvider>
+        </AuthProvider>
     );
 };
 

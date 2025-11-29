@@ -49,6 +49,8 @@ export interface ProcessedDocument {
     size: number;
     textLength: number | null;
     extractionMethod: string | null;
+    department?: string | null;
+    departmentDisplayName?: string | null;
     chunks: number | null;
     processingTime: number | null;
     status: 'uploaded' | 'extracting' | 'chunking' | 'embedding' | 'indexing' | 'completed' | 'error';
@@ -57,4 +59,58 @@ export interface ProcessedDocument {
     ragStoreName?: string | null;
     uploadDate: Date;
     error?: string;
+}
+
+export interface User {
+    id: string;
+    email: string;
+    name: string;
+    role: 'student' | 'professor' | 'admin';
+    is_active: boolean;
+    created_at: string;
+    last_login: string | null;
+    stats?: UserStats;
+}
+
+export interface UserStats {
+    total_documents: number;
+    total_sessions: number;
+    total_messages: number;
+}
+
+export interface UserFormData {
+    email: string;
+    name: string;
+    role: 'student' | 'professor' | 'admin';
+    password?: string;
+    is_active?: boolean;
+}
+
+// ===== Store Permissions Types =====
+
+export interface StorePermission {
+    id: string;
+    user_id: string;
+    store_id: string;
+    user_name: string;
+    user_email: string;
+    user_role: 'student' | 'professor' | 'admin';
+    created_at: string;
+    created_by?: string;
+}
+
+export interface StoreWithPermissions {
+    id: string;
+    user_id: string;
+    name: string;
+    display_name: string;
+    description?: string;
+    icon: string;
+    color: string;
+    document_count: number;
+    rag_store_name?: string;
+    created_at: string;
+    updated_at: string;
+    is_creator: boolean;
+    can_manage: boolean;
 }

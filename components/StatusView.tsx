@@ -5,25 +5,78 @@
 
 import React, { useState, useEffect } from 'react';
 import minioService from '../services/minioService';
+import { apiService } from '../services/apiService';
+import { useSystemConfig } from '../contexts/SystemConfigContext';
+
+interface HealthStatus {
+    status: string;
+    version: string;
+    services: {
+        postgres: string;
+        redis: string;
+        minio: string;
+    };
+}
 
 const StatusView: React.FC = () => {
+    const { config } = useSystemConfig();
     const [minioStatus, setMinioStatus] = useState({ online: true, message: 'MinIO is running' });
     const [storageStats, setStorageStats] = useState({ used: 0, total: 0, files: 0 });
+    const [healthStatus, setHealthStatus] = useState<HealthStatus | null>(null);
+    const [analyticsStats, setAnalyticsStats] = useState<any>(null);
+    const [documentCount, setDocumentCount] = useState(0);
 
     useEffect(() => {
-        // Check MinIO status
-        minioService.getStatus().then(setMinioStatus);
-        minioService.getStorageStats().then(setStorageStats);
+        loadSystemStatus();
+        // Refresh every 30 seconds
+        const interval = setInterval(loadSystemStatus, 30000);
+        return () => clearInterval(interval);
     }, []);
+
+    const loadSystemStatus = async () => {
+        try {
+            // Load MinIO status
+            const [minio, storage, health, analytics, documents] = await Promise.all([
+                minioService.getStatus(),
+                minioService.getStorageStats(),
+                fetch('http://localhost:8000/health').then(r => r.json()),
+                apiService.getAnalyticsStats().catch(() => null),
+                apiService.listDocuments(0, 1000).catch(() => [])
+            ]);
+
+            setMinioStatus(minio);
+            setStorageStats(storage);
+            setHealthStatus(health);
+            setAnalyticsStats(analytics);
+            setDocumentCount(documents.length);
+        } catch (error) {
+            console.error('Error loading system status:', error);
+        }
+    };
+
+    const getServiceStatus = (serviceName: string) => {
+        if (!healthStatus) return 'operational';
+        const service = healthStatus.services[serviceName as keyof typeof healthStatus.services];
+        return service === 'healthy' ? 'operational' : 'down';
+    };
 
     const services = [
         {
-            name: 'Gemini API',
-            status: 'operational',
-            uptime: '99.99%',
-            latency: '120ms',
-            lastCheck: '2 min atrás',
-            description: 'API principal de processamento de linguagem natural'
+            name: 'PostgreSQL Database',
+            status: getServiceStatus('postgres'),
+            uptime: getServiceStatus('postgres') === 'operational' ? '99.99%' : '0%',
+            latency: '15ms',
+            lastCheck: 'Agora',
+            description: 'Banco de dados principal para armazenamento de metadados',
+            metric: documentCount > 0 ? `${documentCount} documentos` : undefined
+        },
+        {
+            name: 'Redis Cache',
+            status: getServiceStatus('redis'),
+            uptime: getServiceStatus('redis') === 'operational' ? '99.99%' : '0%',
+            latency: '5ms',
+            lastCheck: 'Agora',
+            description: 'Cache em memória para sessões e dados temporários'
         },
         {
             name: 'MinIO Storage',
@@ -32,47 +85,43 @@ const StatusView: React.FC = () => {
             latency: minioStatus.online ? '15ms' : 'N/A',
             lastCheck: 'Agora',
             description: 'Sistema de armazenamento de objetos para arquivos',
-            link: minioService.getConsoleUrl()
+            link: minioService.getConsoleUrl(),
+            metric: storageStats.files > 0 ? `${storageStats.files} arquivos` : undefined
         },
         {
-            name: 'RAG Storage',
+            name: 'Gemini API',
             status: 'operational',
-            uptime: '99.95%',
-            latency: '45ms',
-            lastCheck: '1 min atrás',
-            description: 'Sistema de armazenamento de documentos vetorizados'
-        },
-        {
-            name: 'File Upload Service',
-            status: 'operational',
-            uptime: '99.98%',
-            latency: '230ms',
-            lastCheck: '3 min atrás',
-            description: 'Serviço de upload e processamento de documentos'
-        },
-        {
-            name: 'Chat Service',
-            status: 'operational',
-            uptime: '100%',
-            latency: '85ms',
+            uptime: '99.99%',
+            latency: '120ms',
             lastCheck: 'Agora',
-            description: 'Serviço de gerenciamento de conversas'
+            description: 'API de IA para processamento de linguagem natural (Google)'
+        },
+        {
+            name: 'Backend API',
+            status: healthStatus?.status === 'healthy' ? 'operational' : 'down',
+            uptime: healthStatus?.status === 'healthy' ? '99.99%' : '0%',
+            latency: '25ms',
+            lastCheck: 'Agora',
+            description: `API REST do sistema - v${healthStatus?.version || '1.0.0'}`
         },
         {
             name: 'Analytics Engine',
-            status: 'degraded',
-            uptime: '97.2%',
-            latency: '450ms',
-            lastCheck: '5 min atrás',
-            description: 'Motor de análise e métricas'
+            status: analyticsStats ? 'operational' : 'degraded',
+            uptime: analyticsStats ? '99.95%' : '95.0%',
+            latency: '85ms',
+            lastCheck: 'Agora',
+            description: 'Motor de análise e métricas com autenticação JWT',
+            metric: analyticsStats ? `${analyticsStats.total_storage_mb || 0} MB armazenados` : undefined
         }
     ];
 
+    // Calcular métricas reais do sistema
     const systemMetrics = {
-        cpu: 34,
-        memory: 68,
-        storage: 42,
-        network: 18
+        storage: storageStats.total > 0 ? Math.round((storageStats.used / storageStats.total) * 100) : 0,
+        documents: documentCount,
+        files: storageStats.files,
+        space_used: storageStats.used,
+        space_total: storageStats.total
     };
 
     const getStatusColor = (status: string) => {
@@ -107,7 +156,7 @@ const StatusView: React.FC = () => {
                 {/* Header */}
                 <div className="mb-8">
                     <h1 className="text-3xl font-bold text-slate-800 mb-2">Status dos Serviços</h1>
-                    <p className="text-slate-600">Monitoramento em tempo real da infraestrutura do ApiRAGFS</p>
+                    <p className="text-slate-600">Monitoramento em tempo real da infraestrutura do {config.systemName}</p>
                 </div>
 
                 {/* Overall Status Banner */}
@@ -187,6 +236,14 @@ const StatusView: React.FC = () => {
                                                     </svg>
                                                     <span>Última verificação: {service.lastCheck}</span>
                                                 </div>
+                                                {(service as any).metric && (
+                                                    <div className="flex items-center space-x-1">
+                                                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 12l3-3 3 3 4-4M8 21l4-4 4 4M3 4h18M4 4h16v12a1 1 0 01-1 1H5a1 1 0 01-1-1V4z" />
+                                                        </svg>
+                                                        <span className="font-semibold text-blue-600">{(service as any).metric}</span>
+                                                    </div>
+                                                )}
                                             </div>
                                         </div>
                                     </div>
@@ -261,61 +318,49 @@ const StatusView: React.FC = () => {
                 </div>
 
                 {/* System Metrics */}
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                     <div className="bg-white rounded-xl shadow-md p-6 border border-slate-200">
                         <div className="flex items-center justify-between mb-4">
-                            <h4 className="text-sm font-semibold text-slate-700">CPU</h4>
-                            <span className="text-lg font-bold text-slate-800">{systemMetrics.cpu}%</span>
-                        </div>
-                        <div className="w-full bg-slate-200 rounded-full h-2">
-                            <div
-                                className="bg-gradient-to-r from-blue-500 to-blue-600 h-2 rounded-full transition-all"
-                                style={{ width: `${systemMetrics.cpu}%` }}
-                            />
-                        </div>
-                        <p className="text-xs text-slate-500 mt-2">Uso normal</p>
-                    </div>
-
-                    <div className="bg-white rounded-xl shadow-md p-6 border border-slate-200">
-                        <div className="flex items-center justify-between mb-4">
-                            <h4 className="text-sm font-semibold text-slate-700">Memória</h4>
-                            <span className="text-lg font-bold text-slate-800">{systemMetrics.memory}%</span>
-                        </div>
-                        <div className="w-full bg-slate-200 rounded-full h-2">
-                            <div
-                                className="bg-gradient-to-r from-purple-500 to-purple-600 h-2 rounded-full transition-all"
-                                style={{ width: `${systemMetrics.memory}%` }}
-                            />
-                        </div>
-                        <p className="text-xs text-slate-500 mt-2">Uso moderado</p>
-                    </div>
-
-                    <div className="bg-white rounded-xl shadow-md p-6 border border-slate-200">
-                        <div className="flex items-center justify-between mb-4">
-                            <h4 className="text-sm font-semibold text-slate-700">Armazenamento</h4>
+                            <h4 className="text-sm font-semibold text-slate-700">Armazenamento MinIO</h4>
                             <span className="text-lg font-bold text-slate-800">{systemMetrics.storage}%</span>
                         </div>
                         <div className="w-full bg-slate-200 rounded-full h-2">
                             <div
-                                className="bg-gradient-to-r from-green-500 to-green-600 h-2 rounded-full transition-all"
+                                className="bg-gradient-to-r from-orange-500 to-orange-600 h-2 rounded-full transition-all"
                                 style={{ width: `${systemMetrics.storage}%` }}
                             />
                         </div>
-                        <p className="text-xs text-slate-500 mt-2">Espaço disponível</p>
+                        <p className="text-xs text-slate-500 mt-2">
+                            {minioService.formatBytes(systemMetrics.space_used)} / {minioService.formatBytes(systemMetrics.space_total)}
+                        </p>
                     </div>
 
                     <div className="bg-white rounded-xl shadow-md p-6 border border-slate-200">
                         <div className="flex items-center justify-between mb-4">
-                            <h4 className="text-sm font-semibold text-slate-700">Rede</h4>
-                            <span className="text-lg font-bold text-slate-800">{systemMetrics.network}%</span>
+                            <h4 className="text-sm font-semibold text-slate-700">Documentos</h4>
+                            <span className="text-lg font-bold text-slate-800">{systemMetrics.documents}</span>
                         </div>
                         <div className="w-full bg-slate-200 rounded-full h-2">
                             <div
-                                className="bg-gradient-to-r from-orange-500 to-orange-600 h-2 rounded-full transition-all"
-                                style={{ width: `${systemMetrics.network}%` }}
+                                className="bg-gradient-to-r from-blue-500 to-blue-600 h-2 rounded-full transition-all"
+                                style={{ width: `${Math.min((systemMetrics.documents / 100) * 100, 100)}%` }}
                             />
                         </div>
-                        <p className="text-xs text-slate-500 mt-2">Tráfego baixo</p>
+                        <p className="text-xs text-slate-500 mt-2">Total de documentos indexados</p>
+                    </div>
+
+                    <div className="bg-white rounded-xl shadow-md p-6 border border-slate-200">
+                        <div className="flex items-center justify-between mb-4">
+                            <h4 className="text-sm font-semibold text-slate-700">Arquivos</h4>
+                            <span className="text-lg font-bold text-slate-800">{systemMetrics.files}</span>
+                        </div>
+                        <div className="w-full bg-slate-200 rounded-full h-2">
+                            <div
+                                className="bg-gradient-to-r from-green-500 to-green-600 h-2 rounded-full transition-all"
+                                style={{ width: `${Math.min((systemMetrics.files / 100) * 100, 100)}%` }}
+                            />
+                        </div>
+                        <p className="text-xs text-slate-500 mt-2">Arquivos armazenados no MinIO</p>
                     </div>
                 </div>
             </div>

@@ -1,0 +1,9 @@
+Este é um documento de teste para o sistema APIRagFST.
+
+Conteúdo do documento:
+- Item 1: Informação de teste
+- Item 2: Dados de exemplo
+- Item 3: Conteúdo para análise de IA
+
+Este arquivo será usado nos testes automatizados com Playwright.
+Data de criação: 2025-01-27

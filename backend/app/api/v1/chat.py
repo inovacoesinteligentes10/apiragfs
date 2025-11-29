@@ -18,7 +18,7 @@ from ...schemas.chat import (
 )
 from ...services.gemini_service import GeminiService
 
-router = APIRouter()
+router = APIRouter(tags=["Chat"])
 
 
 @router.post("/sessions", response_model=ChatSessionResponse)
@@ -61,12 +61,12 @@ async def list_chat_sessions(
     limit: int = 50
 ):
     """
-    Lista sessões de chat do usuário
+    Lista sessões de chat do usuário (apenas sessões ativas)
     """
     sessions = await db.fetch_all(
         """
         SELECT * FROM chat_sessions
-        WHERE user_id = $1
+        WHERE user_id = $1 AND ended_at IS NULL
         ORDER BY started_at DESC
         LIMIT $2 OFFSET $3
         """,
@@ -82,7 +82,7 @@ async def get_chat_session(
     user_id: str = "default-user"  # TODO: Pegar do token JWT
 ):
     """
-    Busca sessão de chat por ID
+    Busca sessão de chat por ID e valida se o RAG store ainda existe
     """
     session = await db.fetch_one(
         """
@@ -94,6 +94,26 @@ async def get_chat_session(
 
     if not session:
         raise HTTPException(status_code=404, detail="Sessão não encontrada")
+
+    # Validar se o RAG store ainda existe (se a sessão tiver um)
+    if session['rag_store_name']:
+        gemini_service = GeminiService()
+        store_exists = await gemini_service.validate_rag_store(session['rag_store_name'])
+
+        if not store_exists:
+            # Marcar sessão como finalizada
+            await db.execute(
+                """
+                UPDATE chat_sessions
+                SET ended_at = NOW()
+                WHERE id = $1
+                """,
+                session_id
+            )
+            raise HTTPException(
+                status_code=410,  # Gone - recurso não existe mais
+                detail="Esta sessão referencia um RAG store que não existe mais. A sessão foi marcada como finalizada."
+            )
 
     return ChatSessionResponse(**dict(session))
 
@@ -389,6 +409,52 @@ async def query_chat_stream(
     )
 
 
+@router.post("/cleanup-orphaned")
+async def cleanup_orphaned_sessions(
+    user_id: str = "default-user"  # TODO: Pegar do token JWT
+):
+    """
+    Limpa sessões órfãs (que referenciam RAG stores inexistentes)
+    """
+    try:
+        # Buscar todas as sessões ativas
+        sessions = await db.fetch_all(
+            """
+            SELECT id, rag_store_name FROM chat_sessions
+            WHERE user_id = $1 AND ended_at IS NULL AND rag_store_name IS NOT NULL
+            """,
+            user_id
+        )
+
+        gemini_service = GeminiService()
+        orphaned_count = 0
+
+        for session in sessions:
+            # Validar se o RAG store existe
+            store_exists = await gemini_service.validate_rag_store(session['rag_store_name'])
+
+            if not store_exists:
+                # Marcar como finalizada
+                await db.execute(
+                    """
+                    UPDATE chat_sessions
+                    SET ended_at = NOW()
+                    WHERE id = $1
+                    """,
+                    session['id']
+                )
+                orphaned_count += 1
+
+        return {
+            "message": f"{orphaned_count} sessões órfãs foram limpas",
+            "total_checked": len(sessions),
+            "orphaned_removed": orphaned_count
+        }
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Erro ao limpar sessões: {str(e)}")
+
+
 @router.delete("/sessions/{session_id}")
 async def delete_chat_session(
     session_id: str,
@@ -456,19 +522,21 @@ async def get_session_insights(
         raise HTTPException(status_code=404, detail="Sessão não encontrada")
 
     try:
-        # Verificar cache primeiro
+        # Verificar cache primeiro (insights são gerados após upload)
         cache_key = f"insights:{session['rag_store_name']}"
         cached_insights = await redis_client.get(cache_key)
 
         if cached_insights:
+            print(f"✅ Insights retornados do cache para: {session['rag_store_name']}")
             return json.loads(cached_insights)
 
-        # Gerar insights usando Gemini
+        # Se não estiver em cache, gerar agora (fallback)
+        print(f"⚠️ Cache miss - Gerando insights sob demanda para: {session['rag_store_name']}")
         gemini_service = GeminiService()
         insights = await gemini_service.generate_insights(session['rag_store_name'])
 
-        # Cachear por 1 hora (3600 segundos)
-        await redis_client.set(cache_key, json.dumps(insights), 3600)
+        # Cachear por 24 horas (86400 segundos)
+        await redis_client.set(cache_key, json.dumps(insights), 86400)
 
         return insights
 

@@ -15,6 +15,7 @@ export interface DocumentUploadResponse {
     minio_bucket: string;
     text_length: number | null;
     extraction_method: string | null;
+    department: string | null;
     chunks: number | null;
     processing_time: number | null;
     status: 'uploaded' | 'extracting' | 'chunking' | 'embedding' | 'indexing' | 'completed' | 'error';
@@ -46,7 +47,7 @@ export interface MessageResponse {
 
 export interface ChatQueryResponse {
     message: string;
-    grounding_chunks: Array<{
+    grounding_chunks: Array<{ 
         chunk_id?: string;
         text?: string;
     }>;
@@ -58,21 +59,96 @@ export interface DocumentInsight {
     icon: 'document' | 'chart' | 'lightbulb';
 }
 
-export interface RAGStoreResponse {
+export interface SystemPromptResponse {
+    system_prompt: string;
+    updated_at: string;
+}
+
+export interface SystemPromptUpdate {
+    system_prompt: string;
+}
+
+export interface GeneralSettingsResponse {
+    language: string;
+    theme: string;
+    notifications: boolean;
+    auto_save: boolean;
+    system_name: string;
+    system_description: string;
+    system_logo: string;
+    is_admin: boolean;
+    updated_at: string;
+}
+
+export interface GeneralSettingsUpdate {
+    language?: 'pt-BR' | 'en-US' | 'es-ES';
+    theme?: 'light' | 'dark' | 'auto';
+    notifications?: boolean;
+    auto_save?: boolean;
+    system_name?: string;
+    system_description?: string;
+    system_logo?: string;
+}
+
+export interface RagStore {
     id: string;
     user_id: string;
+    name: string;
     display_name: string;
-    rag_store_name: string;
+    description: string | null;
+    icon: string | null;
+    color: string | null;
+    document_count: number;
+    rag_store_name: string | null;
     created_at: string;
     updated_at: string;
 }
 
-export interface RAGStoreCreate {
+export interface RagStoreCreate {
+    name: string;
     display_name: string;
+    description?: string;
+    icon?: string;
+    color?: string;
 }
 
-export interface RAGStoreUpdate {
-    display_name?: string;
+export interface AnalyticsDashboard {
+    total_documents: number;
+    completed_documents: number;
+    total_chat_sessions: number;
+    total_messages: number;
+    documents_by_type: Array<{ type: string; count: number }>;
+    activity_last_7_days: Array<{ date: string; count: number }>;
+    timestamp: string;
+}
+
+export interface AnalyticsStats {
+    total_storage_bytes: number;
+    total_storage_mb: number;
+    avg_processing_time_seconds: number;
+    total_chunks: number;
+    active_chat_sessions: number;
+}
+
+export interface AnalyticsActivity {
+    period_days: number;
+    start_date: string;
+    end_date: string;
+    activity: {
+        [date: string]: Array<{ 
+            event_type: string;
+            count: number;
+        }>;
+    };
+}
+
+export interface TopQuery {
+    query: string;
+    frequency: number;
+}
+
+export interface TopQueriesResponse {
+    top_queries: TopQuery[];
 }
 
 class ApiService {
@@ -83,14 +159,29 @@ class ApiService {
     }
 
     /**
-     * Upload de documento
+     * Upload de documento com progress tracking
      */
-    async uploadDocument(file: File): Promise<DocumentUploadResponse> {
+    async uploadDocument(
+        file: File,
+        department?: string,
+        onProgress?: (progress: number, status: string, statusMessage?: string) => void
+    ): Promise<DocumentUploadResponse> {
         const formData = new FormData();
         formData.append('file', file);
 
+        // Adicionar department aos metadados se fornecido
+        if (department) {
+            const metadata = { department };
+            formData.append('metadata', JSON.stringify(metadata));
+        }
+
+        // Iniciar upload com autenticação JWT
+        const token = localStorage.getItem('access_token');
         const response = await fetch(`${this.baseUrl}/api/v1/documents/upload`, {
             method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${token}`,
+            },
             body: formData,
         });
 
@@ -99,15 +190,96 @@ class ApiService {
             throw new Error(error.detail || 'Erro ao fazer upload');
         }
 
-        return response.json();
+        const document = await response.json();
+
+        // Se callback de progresso foi fornecido, fazer polling de status
+        if (onProgress) {
+            await this.pollDocumentStatus(document.id, onProgress);
+        }
+
+        return document;
     }
 
     /**
-     * Listar documentos
+     * Faz polling do status do documento até completar ou falhar
+     */
+    private async pollDocumentStatus(
+        documentId: string,
+        onProgress: (progress: number, status: string, statusMessage?: string) => void
+    ): Promise<void> {
+        let attempts = 0;
+        const maxAttempts = 60; // 5 minutos (5s * 60)
+        const pollInterval = 5000; // 5 segundos
+
+        while (attempts < maxAttempts) {
+            try {
+                await new Promise(resolve => setTimeout(resolve, pollInterval));
+
+                const doc = await this.getDocument(documentId);
+
+                // Calcular progresso baseado no status
+                let progress = doc.progress_percent || 0;
+
+                // Se não houver progress_percent, estimar baseado no status
+                if (!doc.progress_percent) {
+                    switch (doc.status) {
+                        case 'uploaded':
+                            progress = 10;
+                            break;
+                        case 'extracting':
+                            progress = 30;
+                            break;
+                        case 'chunking':
+                            progress = 50;
+                            break;
+                        case 'embedding':
+                            progress = 70;
+                            break;
+                        case 'indexing':
+                            progress = 90;
+                            break;
+                        case 'completed':
+                            progress = 100;
+                            break;
+                        case 'error':
+                            progress = 0;
+                            break;
+                    }
+                }
+
+                // Notificar progresso
+                onProgress(progress, doc.status, doc.status_message || undefined);
+
+                // Verificar se terminou (sucesso ou erro)
+                if (doc.status === 'completed' || doc.status === 'error') {
+                    break;
+                }
+
+                attempts++;
+            } catch (error) {
+                console.error('Erro ao verificar status do documento:', error);
+                attempts++;
+            }
+        }
+
+        if (attempts >= maxAttempts) {
+            throw new Error('Timeout ao processar documento');
+        }
+    }
+
+    /**
+     * Listar documentos - Usa autenticação JWT
+     * Admin vê todos os documentos, usuários regulares veem apenas dos stores com permissão
      */
     async listDocuments(skip: number = 0, limit: number = 100): Promise<DocumentUploadResponse[]> {
+        const token = localStorage.getItem('access_token');
         const response = await fetch(
-            `${this.baseUrl}/api/v1/documents/?skip=${skip}&limit=${limit}`
+            `${this.baseUrl}/api/v1/documents/?skip=${skip}&limit=${limit}`,
+            {
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                },
+            }
         );
 
         if (!response.ok) {
@@ -118,10 +290,15 @@ class ApiService {
     }
 
     /**
-     * Buscar documento por ID
+     * Buscar documento por ID - Usa autenticação JWT
      */
     async getDocument(documentId: string): Promise<DocumentUploadResponse> {
-        const response = await fetch(`${this.baseUrl}/api/v1/documents/${documentId}`);
+        const token = localStorage.getItem('access_token');
+        const response = await fetch(`${this.baseUrl}/api/v1/documents/${documentId}`, {
+            headers: {
+                'Authorization': `Bearer ${token}`,
+            },
+        });
 
         if (!response.ok) {
             throw new Error('Documento não encontrado');
@@ -131,96 +308,19 @@ class ApiService {
     }
 
     /**
-     * Deletar documento
+     * Deletar documento - Usa autenticação JWT
      */
     async deleteDocument(documentId: string): Promise<void> {
+        const token = localStorage.getItem('access_token');
         const response = await fetch(`${this.baseUrl}/api/v1/documents/${documentId}`, {
             method: 'DELETE',
+            headers: {
+                'Authorization': `Bearer ${token}`,
+            },
         });
 
         if (!response.ok) {
             throw new Error('Erro ao deletar documento');
-        }
-    }
-
-    /**
-     * Criar RAG Store
-     */
-    async createRAGStore(data: RAGStoreCreate): Promise<RAGStoreResponse> {
-        const response = await fetch(`${this.baseUrl}/api/v1/rag_stores/`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify(data),
-        });
-
-        if (!response.ok) {
-            const error = await response.json();
-            throw new Error(error.detail || 'Erro ao criar RAG Store');
-        }
-
-        return response.json();
-    }
-
-    /**
-     * Listar RAG Stores
-     */
-    async listRAGStores(skip: number = 0, limit: number = 100): Promise<RAGStoreResponse[]> {
-        const response = await fetch(
-            `${this.baseUrl}/api/v1/rag_stores/?skip=${skip}&limit=${limit}`
-        );
-
-        if (!response.ok) {
-            throw new Error('Erro ao listar RAG Stores');
-        }
-
-        return response.json();
-    }
-
-    /**
-     * Buscar RAG Store por ID
-     */
-    async getRAGStore(ragStoreId: string): Promise<RAGStoreResponse> {
-        const response = await fetch(`${this.baseUrl}/api/v1/rag_stores/${ragStoreId}`);
-
-        if (!response.ok) {
-            throw new Error('RAG Store não encontrado');
-        }
-
-        return response.json();
-    }
-
-    /**
-     * Atualizar RAG Store
-     */
-    async updateRAGStore(ragStoreId: string, data: RAGStoreUpdate): Promise<RAGStoreResponse> {
-        const response = await fetch(`${this.baseUrl}/api/v1/rag_stores/${ragStoreId}`, {
-            method: 'PUT',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify(data),
-        });
-
-        if (!response.ok) {
-            const error = await response.json();
-            throw new Error(error.detail || 'Erro ao atualizar RAG Store');
-        }
-
-        return response.json();
-    }
-
-    /**
-     * Deletar RAG Store
-     */
-    async deleteRAGStore(ragStoreId: string): Promise<void> {
-        const response = await fetch(`${this.baseUrl}/api/v1/rag_stores/${ragStoreId}`, {
-            method: 'DELETE',
-        });
-
-        if (!response.ok) {
-            throw new Error('Erro ao deletar RAG Store');
         }
     }
 
@@ -318,76 +418,86 @@ class ApiService {
         onDone: (fullText: string, groundingChunks: any[]) => void,
         onError: (error: string) => void
     ): Promise<void> {
-        console.log('🌐 Enviando request de streaming para:', `${this.baseUrl}/api/v1/chat/sessions/${sessionId}/query-stream`);
-
-        const response = await fetch(`${this.baseUrl}/api/v1/chat/sessions/${sessionId}/query-stream`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({ message }),
-        });
-
-        console.log('📡 Response status:', response.status);
-        console.log('📡 Response headers:', Object.fromEntries(response.headers.entries()));
-
-        if (!response.ok) {
-            const error = await response.json();
-            throw new Error(error.detail || 'Erro ao enviar mensagem');
-        }
-
-        const reader = response.body?.getReader();
-        if (!reader) {
-            throw new Error('Stream não disponível');
-        }
-
-        const decoder = new TextDecoder();
-        let buffer = '';
-
         try {
-            while (true) {
-                const { done, value } = await reader.read();
+            console.log('🌐 Enviando request de streaming para:', `${this.baseUrl}/api/v1/chat/sessions/${sessionId}/query-stream`);
 
-                if (done) {
-                    console.log('🏁 Stream finalizado');
-                    break;
-                }
+            const response = await fetch(`${this.baseUrl}/api/v1/chat/sessions/${sessionId}/query-stream`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ message }),
+            });
 
-                buffer += decoder.decode(value, { stream: true });
-                const lines = buffer.split('\n');
+            console.log('📡 Response status:', response.status);
+            console.log('📡 Response headers:', Object.fromEntries(response.headers.entries()));
 
-                // Manter a última linha incompleta no buffer
-                buffer = lines.pop() || '';
+            if (!response.ok) {
+                const error = await response.json();
+                const errorMessage = error.detail || 'Erro ao enviar mensagem';
+                console.error('❌ Erro HTTP:', response.status, errorMessage);
+                onError(errorMessage);
+                return;
+            }
 
-                for (const line of lines) {
-                    if (line.startsWith('data: ')) {
-                        const data = line.slice(6);
-                        console.log('📦 Evento SSE recebido:', data);
-                        try {
-                            const event = JSON.parse(data);
+            const reader = response.body?.getReader();
+            if (!reader) {
+                onError('Stream não disponível');
+                return;
+            }
 
-                            switch (event.type) {
-                                case 'content':
-                                    onContent(event.text);
-                                    break;
-                                case 'grounding':
-                                    onGrounding(event.grounding_chunks);
-                                    break;
-                                case 'done':
-                                    onDone(event.full_text, event.grounding_chunks);
-                                    break;
-                                case 'error':
-                                    onError(event.message);
-                                    break;
+            const decoder = new TextDecoder();
+            let buffer = '';
+
+            try {
+                while (true) {
+                    const { done, value } = await reader.read();
+
+                    if (done) {
+                        console.log('🏁 Stream finalizado');
+                        break;
+                    }
+
+                    buffer += decoder.decode(value, { stream: true });
+                    const lines = buffer.split('\n');
+
+                    // Manter a última linha incompleta no buffer
+                    buffer = lines.pop() || '';
+
+                    for (const line of lines) {
+                        if (line.startsWith('data: ')) {
+                            const data = line.slice(6);
+                            console.log('📦 Evento SSE recebido:', data);
+                            try {
+                                const event = JSON.parse(data);
+
+                                switch (event.type) {
+                                    case 'content':
+                                        onContent(event.text);
+                                        break;
+                                    case 'grounding':
+                                        onGrounding(event.grounding_chunks);
+                                        break;
+                                    case 'done':
+                                        onDone(event.full_text, event.grounding_chunks);
+                                        break;
+                                    case 'error':
+                                        onError(event.message);
+                                        break;
+                                }
+                            } catch (e) {
+                                console.error('❌ Erro ao parsear evento SSE:', e, 'Data:', data);
                             }
-                        } catch (e) {
-                            console.error('❌ Erro ao parsear evento SSE:', e, 'Data:', data);
                         }
                     }
                 }
+            } finally {
+                reader.releaseLock();
             }
-        } finally {
-            reader.releaseLock();
+        } catch (error) {
+            console.error('❌ Erro no streaming:', error);
+            const errorMessage = error instanceof Error ? error.message : String(error);
+            onError(errorMessage);
         }
     }
 
@@ -425,6 +535,407 @@ class ApiService {
 
         if (!response.ok) {
             throw new Error('API não está respondendo');
+        }
+
+        return response.json();
+    }
+
+    /**
+     * Buscar system prompt atual - Usa autenticação JWT
+     */
+    async getSystemPrompt(): Promise<SystemPromptResponse> {
+        const token = localStorage.getItem('access_token');
+        const response = await fetch(`${this.baseUrl}/api/v1/settings/system-prompt`, {
+            headers: {
+                'Authorization': `Bearer ${token}`,
+            },
+        });
+
+        if (!response.ok) {
+            throw new Error('Erro ao buscar system prompt');
+        }
+
+        return response.json();
+    }
+
+    /**
+     * Atualizar system prompt - Usa autenticação JWT
+     */
+    async updateSystemPrompt(systemPrompt: string): Promise<SystemPromptResponse> {
+        const token = localStorage.getItem('access_token');
+        const response = await fetch(`${this.baseUrl}/api/v1/settings/system-prompt`, {
+            method: 'PUT',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`,
+            },
+            body: JSON.stringify({ system_prompt: systemPrompt }),
+        });
+
+        if (!response.ok) {
+            const error = await response.json();
+            throw new Error(error.detail || 'Erro ao atualizar system prompt');
+        }
+
+        return response.json();
+    }
+
+    /**
+     * Resetar system prompt para o padrão - Usa autenticação JWT
+     */
+    async resetSystemPrompt(): Promise<SystemPromptResponse> {
+        const token = localStorage.getItem('access_token');
+        const response = await fetch(`${this.baseUrl}/api/v1/settings/reset-system-prompt`, {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${token}`,
+            },
+        });
+
+        if (!response.ok) {
+            throw new Error('Erro ao resetar system prompt');
+        }
+
+        return response.json();
+    }
+
+    /**
+     * Buscar configurações gerais - Usa autenticação JWT
+     */
+    async getGeneralSettings(): Promise<GeneralSettingsResponse> {
+        const token = localStorage.getItem('access_token');
+        const response = await fetch(`${this.baseUrl}/api/v1/settings/general`, {
+            headers: {
+                'Authorization': `Bearer ${token}`,
+            },
+        });
+
+        if (!response.ok) {
+            throw new Error('Erro ao buscar configurações gerais');
+        }
+
+        return response.json();
+    }
+
+    /**
+     * Atualizar configurações gerais - Usa autenticação JWT
+     */
+    async updateGeneralSettings(settings: GeneralSettingsUpdate): Promise<GeneralSettingsResponse> {
+        const token = localStorage.getItem('access_token');
+        const response = await fetch(`${this.baseUrl}/api/v1/settings/general`, {
+            method: 'PUT',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`,
+            },
+            body: JSON.stringify(settings),
+        });
+
+        if (!response.ok) {
+            const error = await response.json();
+            throw new Error(error.detail || 'Erro ao atualizar configurações gerais');
+        }
+
+        return response.json();
+    }
+
+    /**
+     * Resetar configurações gerais para o padrão - Usa autenticação JWT
+     */
+    async resetGeneralSettings(): Promise<GeneralSettingsResponse> {
+        const token = localStorage.getItem('access_token');
+        const response = await fetch(`${this.baseUrl}/api/v1/settings/reset-general`, {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${token}`,
+            },
+        });
+
+        if (!response.ok) {
+            throw new Error('Erro ao resetar configurações gerais');
+        }
+
+        return response.json();
+    }
+
+    /**
+     * Listar RAG Stores (Departments) - Agora usa autenticação JWT
+     */
+    async listRagStores(): Promise<import('../types').StoreWithPermissions[]> {
+        const token = localStorage.getItem('access_token');
+        const response = await fetch(`${this.baseUrl}/api/v1/stores/`, {
+            headers: {
+                'Authorization': `Bearer ${token}`,
+            },
+        });
+
+        if (!response.ok) {
+            throw new Error('Erro ao listar stores');
+        }
+
+        return response.json();
+    }
+
+    /**
+     * Buscar RAG Store por ID - Agora usa autenticação JWT
+     */
+    async getRagStore(storeId: string): Promise<import('../types').StoreWithPermissions> {
+        const token = localStorage.getItem('access_token');
+        const response = await fetch(`${this.baseUrl}/api/v1/stores/${storeId}`, {
+            headers: {
+                'Authorization': `Bearer ${token}`,
+            },
+        });
+
+        if (!response.ok) {
+            throw new Error('Store não encontrado');
+        }
+
+        return response.json();
+    }
+
+    /**
+     * Criar novo RAG Store - Agora usa autenticação JWT
+     */
+    async createRagStore(storeData: RagStoreCreate): Promise<RagStore> {
+        const token = localStorage.getItem('access_token');
+        const response = await fetch(`${this.baseUrl}/api/v1/stores/`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`,
+            },
+            body: JSON.stringify(storeData),
+        });
+
+        if (!response.ok) {
+            const error = await response.json();
+            throw new Error(error.detail || 'Erro ao criar store');
+        }
+
+        return response.json();
+    }
+
+    /**
+     * Atualizar RAG Store - Agora usa autenticação JWT e ID ao invés de nome
+     */
+    async updateRagStore(storeId: string, storeData: RagStoreCreate): Promise<RagStore> {
+        const token = localStorage.getItem('access_token');
+        const response = await fetch(`${this.baseUrl}/api/v1/stores/${storeId}`, {
+            method: 'PUT',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`,
+            },
+            body: JSON.stringify(storeData),
+        });
+
+        if (!response.ok) {
+            const error = await response.json();
+            throw new Error(error.detail || 'Erro ao atualizar store');
+        }
+
+        return response.json();
+    }
+
+    /**
+     * Deletar RAG Store - Agora usa autenticação JWT e ID ao invés de nome
+     */
+    async deleteRagStore(storeId: string): Promise<void> {
+        const token = localStorage.getItem('access_token');
+        const response = await fetch(`${this.baseUrl}/api/v1/stores/${storeId}`, {
+            method: 'DELETE',
+            headers: {
+                'Authorization': `Bearer ${token}`,
+            },
+        });
+
+        if (!response.ok) {
+            const error = await response.json();
+            throw new Error(error.detail || 'Erro ao deletar store');
+        }
+    }
+
+    // ===== Store Permissions Methods =====
+
+    /**
+     * Listar permissões de um store
+     */
+    async getStorePermissions(storeId: string): Promise<import('../types').StorePermission[]> {
+        const token = localStorage.getItem('access_token');
+        const response = await fetch(`${this.baseUrl}/api/v1/stores/${storeId}/permissions`, {
+            headers: {
+                'Authorization': `Bearer ${token}`,
+            },
+        });
+
+        if (!response.ok) {
+            throw new Error('Erro ao listar permissões do store');
+        }
+
+        return response.json();
+    }
+
+    /**
+     * Adicionar permissão de usuário a um store
+     */
+    async addStorePermission(storeId: string, userId: string): Promise<void> {
+        const token = localStorage.getItem('access_token');
+        const response = await fetch(`${this.baseUrl}/api/v1/stores/${storeId}/permissions`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`,
+            },
+            body: JSON.stringify({ user_id: userId }),
+        });
+
+        if (!response.ok) {
+            const error = await response.json();
+            throw new Error(error.detail || 'Erro ao adicionar permissão');
+        }
+    }
+
+    /**
+     * Remover permissão de usuário de um store
+     */
+    async removeStorePermission(storeId: string, userId: string): Promise<void> {
+        const token = localStorage.getItem('access_token');
+        const response = await fetch(`${this.baseUrl}/api/v1/stores/${storeId}/permissions/${userId}`, {
+            method: 'DELETE',
+            headers: {
+                'Authorization': `Bearer ${token}`,
+            },
+        });
+
+        if (!response.ok) {
+            const error = await response.json();
+            throw new Error(error.detail || 'Erro ao remover permissão');
+        }
+    }
+
+    /**
+     * Mover documento para outro store
+     */
+    async moveDocumentToStore(documentId: string, targetStore: string): Promise<{ message: string; old_store: string; new_store: string }> {
+        const token = localStorage.getItem('access_token');
+        const response = await fetch(`${this.baseUrl}/api/v1/documents/${documentId}/move-store?target_store=${targetStore}`, {
+            method: 'PATCH',
+            headers: {
+                'Authorization': `Bearer ${token}`,
+            },
+        });
+
+        if (!response.ok) {
+            const error = await response.json();
+            throw new Error(error.detail || 'Erro ao mover documento');
+        }
+
+        return response.json();
+    }
+
+    /**
+     * Analytics - Dashboard metrics - Usa autenticação JWT
+     * Admin vê métricas globais, usuários regulares veem apenas suas métricas
+     */
+    async getAnalyticsDashboard(): Promise<AnalyticsDashboard> {
+        const token = localStorage.getItem('access_token');
+        const response = await fetch(`${this.baseUrl}/api/v1/analytics/dashboard`, {
+            headers: {
+                'Authorization': `Bearer ${token}`,
+            },
+        });
+
+        if (!response.ok) {
+            throw new Error('Erro ao buscar métricas do dashboard');
+        }
+
+        return response.json();
+    }
+
+    /**
+     * Analytics - General stats - Usa autenticação JWT
+     * Admin vê estatísticas globais, usuários regulares veem apenas suas estatísticas
+     */
+    async getAnalyticsStats(): Promise<AnalyticsStats> {
+        const token = localStorage.getItem('access_token');
+        const response = await fetch(`${this.baseUrl}/api/v1/analytics/stats`, {
+            headers: {
+                'Authorization': `Bearer ${token}`,
+            },
+        });
+
+        if (!response.ok) {
+            throw new Error('Erro ao buscar estatísticas');
+        }
+
+        return response.json();
+    }
+
+    /**
+     * Analytics - Activity over time
+     */
+    async getAnalyticsActivity(days: number, userId: string): Promise<AnalyticsActivity> {
+        const response = await fetch(`${this.baseUrl}/api/v1/analytics/activity?days=${days}&user_id=${userId}`);
+
+        if (!response.ok) {
+            throw new Error('Erro ao buscar atividade');
+        }
+
+        return response.json();
+    }
+
+    /**
+     * Analytics - Top queries
+     */
+    async getTopQueries(limit: number, userId: string): Promise<TopQueriesResponse> {
+        const response = await fetch(`${this.baseUrl}/api/v1/analytics/queries?limit=${limit}&user_id=${userId}`);
+
+        if (!response.ok) {
+            throw new Error('Erro ao buscar top queries');
+        }
+
+        return response.json();
+    }
+
+    /**
+     * Analytics - Track event
+     */
+    async trackEvent(eventType: string, eventData: any, userId: string): Promise<{ success: boolean; message: string }> {
+        const response = await fetch(`${this.baseUrl}/api/v1/analytics/track`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                event_type: eventType,
+                event_data: eventData,
+                user_id: userId,
+            }),
+        });
+
+        if (!response.ok) {
+            throw new Error('Erro ao registrar evento');
+        }
+
+        return response.json();
+    }
+
+    // ===== User Management Methods =====
+
+    /**
+     * Listar todos os usuários
+     */
+    async listUsers(): Promise<import('../types').User[]> {
+        const token = localStorage.getItem('access_token');
+        const response = await fetch(`${this.baseUrl}/api/v1/users/`, {
+            headers: {
+                'Authorization': `Bearer ${token}`,
+            },
+        });
+
+        if (!response.ok) {
+            throw new Error('Erro ao listar usuários');
         }
 
         return response.json();

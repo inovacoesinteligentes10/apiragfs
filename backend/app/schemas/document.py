@@ -3,7 +3,7 @@ Schemas Pydantic para documentos
 """
 from datetime import datetime
 from typing import Optional
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from uuid import UUID
 from enum import Enum
 
@@ -39,6 +39,7 @@ class DocumentResponse(BaseModel):
     minio_bucket: str
     text_length: Optional[int] = None
     extraction_method: Optional[str] = None
+    department: Optional[str] = None
     chunks: Optional[int] = None
     processing_time: Optional[int] = None
     status: str
@@ -49,6 +50,14 @@ class DocumentResponse(BaseModel):
     upload_date: datetime
     created_at: datetime
     updated_at: datetime
+
+    @field_validator('id', 'user_id', mode='before')
+    @classmethod
+    def convert_uuid_to_str(cls, v):
+        """Converter UUID para string"""
+        if isinstance(v, UUID):
+            return str(v)
+        return v
 
     class Config:
         from_attributes = True
