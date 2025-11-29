@@ -6,8 +6,8 @@ export default defineConfig(({ mode }) => {
     const env = loadEnv(mode, '.', '');
     return {
       server: {
-        port: 3001,
-        strictPort: true, // Força a porta 3001, não tenta outras portas
+        port: 8080,
+        strictPort: true,
         host: '0.0.0.0',
       },
       plugins: [react()],
