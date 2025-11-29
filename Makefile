@@ -1,3 +1,5 @@
+SHELL := /bin/bash
+
 .PHONY: help network up down logs status restart dev build install
 .PHONY: minio-up minio-down minio-logs minio-console minio-reset
 .PHONY: postgres-logs redis-logs health db-migrate db-init
@@ -60,6 +62,10 @@ dev: ## Inicia o servidor de desenvolvimento
 
 build: ## Compila o projeto
 	@npm run build
+
+rebuild: ## Recompila as imagens Docker sem cache
+	@docker compose build --no-cache
+
 
 install: ## Instala as dependências
 	@npm install
@@ -139,3 +145,16 @@ db-fix-docs: ## Corrige documentos existentes sem rag_store_name
 	else \
 		echo "Operação cancelada"; \
 	fi
+
+db-reset: ## Remove volumes e reinicia o PostgreSQL
+	@echo "⚠️  Isso irá remover todos os dados do PostgreSQL!"
+	@read -p "Tem certeza? [y/N] " -n 1 -r; \
+	echo; \
+	if [[ $$REPLY =~ ^[Yy]$$ ]]; then \
+		docker compose down -v postgres; \
+		docker compose up -d postgres; \
+		echo "✓ PostgreSQL resetado"; \
+	else \
+		echo "Operação cancelada"; \
+	fi
+

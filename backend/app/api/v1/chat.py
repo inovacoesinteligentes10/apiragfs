@@ -16,7 +16,8 @@ from ...schemas.chat import (
     MessageCreate, MessageResponse,
     ChatQueryRequest, ChatQueryResponse
 )
-from ...services.gemini_service import GeminiService
+from ...middleware.auth import get_current_user
+from ...schemas.auth import UserResponse as User
 
 router = APIRouter(tags=["Chat"])
 
@@ -24,7 +25,7 @@ router = APIRouter(tags=["Chat"])
 @router.post("/sessions", response_model=ChatSessionResponse)
 async def create_chat_session(
     session_data: ChatSessionCreate,
-    user_id: str = "default-user"  # TODO: Pegar do token JWT
+    current_user: User = Depends(get_current_user)
 ):
     """
     Cria uma nova sessão de chat
@@ -39,7 +40,7 @@ async def create_chat_session(
                 id, user_id, rag_store_name, started_at, created_at, updated_at
             ) VALUES ($1, $2, $3, NOW(), NOW(), NOW())
             """,
-            session_id, user_id, session_data.rag_store_name
+            session_id, current_user.id, session_data.rag_store_name
         )
 
         # Buscar sessão criada
@@ -56,7 +57,7 @@ async def create_chat_session(
 
 @router.get("/sessions", response_model=List[ChatSessionResponse])
 async def list_chat_sessions(
-    user_id: str = "default-user",  # TODO: Pegar do token JWT
+    current_user: User = Depends(get_current_user),
     skip: int = 0,
     limit: int = 50
 ):
@@ -70,7 +71,7 @@ async def list_chat_sessions(
         ORDER BY started_at DESC
         LIMIT $2 OFFSET $3
         """,
-        user_id, limit, skip
+        current_user.id, limit, skip
     )
 
     return [ChatSessionResponse(**dict(session)) for session in sessions]
@@ -79,7 +80,7 @@ async def list_chat_sessions(
 @router.get("/sessions/{session_id}", response_model=ChatSessionResponse)
 async def get_chat_session(
     session_id: str,
-    user_id: str = "default-user"  # TODO: Pegar do token JWT
+    current_user: User = Depends(get_current_user)
 ):
     """
     Busca sessão de chat por ID e valida se o RAG store ainda existe
@@ -89,7 +90,7 @@ async def get_chat_session(
         SELECT * FROM chat_sessions
         WHERE id = $1 AND user_id = $2
         """,
-        session_id, user_id
+        session_id, current_user.id
     )
 
     if not session:
@@ -121,7 +122,7 @@ async def get_chat_session(
 @router.get("/sessions/{session_id}/messages", response_model=List[MessageResponse])
 async def get_session_messages(
     session_id: str,
-    user_id: str = "default-user"  # TODO: Pegar do token JWT
+    current_user: User = Depends(get_current_user)
 ):
     """
     Busca mensagens de uma sessão
@@ -132,7 +133,7 @@ async def get_session_messages(
         SELECT * FROM chat_sessions
         WHERE id = $1 AND user_id = $2
         """,
-        session_id, user_id
+        session_id, current_user.id
     )
 
     if not session:
@@ -155,7 +156,7 @@ async def get_session_messages(
 async def query_chat(
     session_id: str,
     query: ChatQueryRequest,
-    user_id: str = "default-user"  # TODO: Pegar do token JWT
+    current_user: User = Depends(get_current_user)
 ):
     """
     Envia uma query para o chat e retorna resposta
@@ -167,7 +168,7 @@ async def query_chat(
             SELECT * FROM chat_sessions
             WHERE id = $1 AND user_id = $2
             """,
-            session_id, user_id
+            session_id, current_user.id
         )
 
         if not session:
@@ -256,7 +257,7 @@ async def query_chat(
 async def query_chat_stream(
     session_id: str,
     query: ChatQueryRequest,
-    user_id: str = "default-user"  # TODO: Pegar do token JWT
+    current_user: User = Depends(get_current_user)
 ):
     """
     Envia uma query para o chat e retorna resposta com streaming (SSE)
@@ -269,7 +270,7 @@ async def query_chat_stream(
                 SELECT * FROM chat_sessions
                 WHERE id = $1 AND user_id = $2
                 """,
-                session_id, user_id
+                session_id, current_user.id
             )
 
             if not session:
@@ -411,7 +412,7 @@ async def query_chat_stream(
 
 @router.post("/cleanup-orphaned")
 async def cleanup_orphaned_sessions(
-    user_id: str = "default-user"  # TODO: Pegar do token JWT
+    current_user: User = Depends(get_current_user)
 ):
     """
     Limpa sessões órfãs (que referenciam RAG stores inexistentes)
@@ -423,7 +424,7 @@ async def cleanup_orphaned_sessions(
             SELECT id, rag_store_name FROM chat_sessions
             WHERE user_id = $1 AND ended_at IS NULL AND rag_store_name IS NOT NULL
             """,
-            user_id
+            current_user.id
         )
 
         gemini_service = GeminiService()
@@ -458,7 +459,7 @@ async def cleanup_orphaned_sessions(
 @router.delete("/sessions/{session_id}")
 async def delete_chat_session(
     session_id: str,
-    user_id: str = "default-user"  # TODO: Pegar do token JWT
+    current_user: User = Depends(get_current_user)
 ):
     """
     Deleta sessão de chat
@@ -469,7 +470,7 @@ async def delete_chat_session(
         SELECT * FROM chat_sessions
         WHERE id = $1 AND user_id = $2
         """,
-        session_id, user_id
+        session_id, current_user.id
     )
 
     if not session:
@@ -504,7 +505,7 @@ async def delete_chat_session(
 @router.get("/sessions/{session_id}/insights")
 async def get_session_insights(
     session_id: str,
-    user_id: str = "default-user"  # TODO: Pegar do token JWT
+    current_user: User = Depends(get_current_user)
 ):
     """
     Busca insights dos documentos da sessão
@@ -515,7 +516,7 @@ async def get_session_insights(
         SELECT * FROM chat_sessions
         WHERE id = $1 AND user_id = $2
         """,
-        session_id, user_id
+        session_id, current_user.id
     )
 
     if not session:
